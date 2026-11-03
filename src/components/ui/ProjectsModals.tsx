@@ -13,7 +13,7 @@ import {
 import { PROJECTS_DATA, ProjectItem } from "@/data/projects";
 
 // ============================================================================
-// 1. MODAL DE FICHA TÉCNICA DEL PROYECTO (DUAL: ORDENADOR + MÓVIL)
+// 1. MODAL DE FICHA TÉCNICA DEL PROYECTO (USA modalMobileImg DE 1080x1920)
 // ============================================================================
 export function ProjectDetailModal({
   selectedProject,
@@ -96,8 +96,8 @@ export function ProjectDetailModal({
             />
           ) : (
             <img
-              src={selectedProject.mobileImg}
-              alt={`${selectedProject.title} - Vista Móvil`}
+              src={selectedProject.modalMobileImg}
+              alt={`${selectedProject.title} - Vista Móvil MD`}
               className="max-h-[70vh] w-auto object-contain rounded-2xl border border-white/20 shadow-lg"
             />
           )}
@@ -169,7 +169,7 @@ export function ProjectDetailModal({
 }
 
 // ============================================================================
-// 2. MODAL DE CATÁLOGO COMPLETO "WORKS" FLOTANDO SOBRE LA PARED LED
+// 2. MODAL DE CATÁLOGO COMPLETO "WORKS"
 // ============================================================================
 export function AllWorksCatalogModal({
   show,
