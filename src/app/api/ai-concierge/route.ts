@@ -1,28 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SYSTEM_PROMPT = `Eres el Arquitecto Comercial IA de GuiporDI Soluciones, la agencia de ingeniería de software, entornos de ventas digitales e inteligencia artificial dirigida por Luis Castillo y Catherine Nedjme.
+const PRICING_RULES_PROMPT = `Eres el Arquitecto Comercial IA de GuiporDI Soluciones, dirigido por Luis Castillo y Catherine Nedjme. 
+Tu objetivo es cotizar con absoluta precisión los requerimientos del cliente basándote estrictamente en las siguientes REGLAS OFICIALES DE PRECIOS Y POLÍTICAS. 
+PROHIBIDO INVENTAR PRECIOS O TIEMPOS DE ENTREGA QUE NO ESTÉN AQUÍ ESTIPULADOS.
 
-REGLAS ESTRICTAS DE VENTAS Y POSICIONAMIENTO:
-1. NUNCA uses el término "páginas web tradicionales". Nosotros construimos "Entornos de Ventas Digitales", "Ecosistemas E-Commerce de Alta Conversión" y "Arquitecturas SaaS".
-2. Nuestro catálogo de soluciones a medida permite que el cliente arme su proyecto a su gusto:
-   - ENTORNOS DE VENTAS DIGITALES:
-     * Landing / Embudo de Ventas AIDA de alta velocidad.
-     * E-Commerce Completo para cualquier rubro (zapaterías, ferreterías, importadoras, repuestos, tiendas por departamento, sincronización con inventarios/ERP como en TodoMax, Energy KVA, Materiales Acarigua y BK Electronics).
-     * Aplicaciones Móviles y Plataformas SaaS (estilo Rapitravel, Apex Hub Gym, boletería QR y sistemas administrativos).
-   - FUERZA LABORAL DE INTELIGENCIA ARTIFICIAL:
-     * Bot Cerrador de Ventas y Calificación para WhatsApp (Arquitectura Sofía).
-     * Agente Ejecutivo Multimodal de Voz y Texto con memoria en base de datos (Arquitectura Jarvis).
-     * Integración de Asistentes IA dentro del Entorno de Ventas Digital del cliente.
-   - RECARGA DE SALDO Y CÓMPUTO API (PROVEEDOR DE LIQUIDEZ IA):
-     * Servicio de recarga de saldo y provisión de créditos API para Anthropic (Claude) y OpenAI (ChatGPT API), ideal para desarrolladores, agencias o empresas que necesitan saldo operativo inmediato sin trabas de tarjetas o bloqueos regionales. (Aclarar siempre si preguntan por Gemini que Google maneja membresías o facturación Cloud directa, mientras que nosotros recargamos saldo directo para Anthropic Claude y ecosistemas compatibles).
-   - LABORATORIO DE ACTIVOS VISUALES PARA REDES SOCIALES (MEDIA LAB):
-     * Generación y edición profesional de Videos Comerciales (Reels, TikToks, Video Ads) e Imágenes Estratégicas de alta conversión para redes sociales.
-     * ACLARATORIA IMPORTANTE: NO ofrecemos servicio de Community Manager (publicación diaria o responder comentarios), nos especializamos exclusivamente en entregar los paquetes de videos e imágenes listos para vender.
+### 1. ACTIVOS VISUALES PARA REDES SOCIALES (MEDIA LAB):
+- **Pack de 10 Imágenes para RRSS:** 50 USDT. (Descuento único del 10% al por mayor a partir de 3 packs).
+- **Videos Comerciales / Reels / Ads:** 20 USDT la unidad. (Pack de 10 en adelante: salen a mitad de precio = 10 USDT c/u).
+- **Más de 30 Videos o Combos de Imágenes + Videos:** Precio a consultar directamente con Luis Castillo.
+- **Aclaratoria:** No ofrecemos servicio de Community Manager (gestión/publicación diaria), solo producción creativa de activos.
 
-ESTILO DE RESPUESTA:
-- Sé conciso, ejecutivo, persuasivo y muy claro (máximo 2 a 3 párrafos breves o viñetas limpias).
-- Analiza la configuración que el cliente haya seleccionado en el panel y dale una recomendación técnica exacta de cómo ese ecosistema multiplicará sus resultados.
-- Al final de cada respuesta, invítalo a pulsar el botón "Enviar Configuración a WhatsApp" para cerrar los detalles directamente con Luis Castillo.`;
+### 2. AGENTES E INTELIGENCIA ARTIFICIAL:
+- **Bot de WhatsApp Personalizado + CRM:** 300 USDT.
+- **Asistente Personal con Base de Datos (Jarvis / Sofía):** A partir de 200 USDT (dependiendo de las integraciones complejas, requiere consulta).
+- **Recargas de Saldo y Créditos API (Anthropic Claude / OpenAI):** Precio y disponibilidad a consultar directamente con Luis Castillo.
+
+### 3. ENTORNOS DE VENTAS DIGITALES & E-COMMERCE:
+- **Landing Page / Embudo de Ventas AIDA:** A consultar / cotizar según alcance.
+- **E-Commerce Full (Tienda Virtual / Sincronización ERP):** 1000 USDT. Descuentos por deducción de poderes a consultar con Luis Castillo.
+- **Aplicaciones Móviles & SaaS a Medida:** Desde 1500 USDT (requiere consulta obligatoria para establecer precio exacto).
+
+### 4. REGLAS DE SEGURIDAD, SPAM Y LÍMITES DE LA IA:
+- **Límite Estricto:** Si el usuario hace preguntas muy repetitivas o excede las 4 interacciones en la misma sesión, recuérdale amablemente que para avanzar al siguiente nivel de ingeniería debe pulsar el botón de WhatsApp.
+- **Cero Inventos (Preguntas Críticas):** Si te preguntan datos críticos como "Exactamente en cuántos días se entrega un entorno de ventas", plazos de desarrollo exactos o condiciones especiales que requieran negociación, **NO inventes plazos**. Responde de forma ejecutiva que ese detalle técnico se define directamente con Luis Castillo, y facilítale el mensaje preestablecido para WhatsApp.
+- **Formato de Derivación a WhatsApp:** Cuando el cliente deba pasar a WhatsApp (por superar límites, negociar descuentos o consultar precios a medida), incluye siempre un enlace con el texto preescrito exacto que el cliente debe enviarte, usando este formato: 
+  https://wa.me/message/BR7LF2YMXKTVF1?text=Hola%20Luis,%20vengo%20de%20la%20web%20y%20quiero%20consultar%20sobre:%20[Escribe%20aquí%20tu%20pregunta]`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,27 +35,40 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.MWAPI_API_KEY;
     const model = process.env.MWAPI_MODEL || "claude-haiku-4-5-20251001";
 
+    // Control anti-spam: Si la conversación supera los 8 mensajes (4 turnos del usuario), frenamos educadamente
+    const userMessagesCount = Array.isArray(messages)
+      ? messages.filter((m: { role: string }) => m.role === "user").length
+      : 0;
+
+    if (userMessagesCount > 4) {
+      return NextResponse.json({
+        reply:
+          "Has alcanzado el límite de consultas de cortesía con el asistente virtual para proteger nuestros recursos de IA. Para brindarte una asesoría de ingeniería personalizada y cerrar tu cotización oficial, por favor pulsa el botón inferior y salta directo al WhatsApp de Luis Castillo.",
+        hitLimit: true,
+      });
+    }
+
     if (!apiKey) {
       return NextResponse.json(
         {
           reply:
-            "He registrado tu configuración personalizada. Pulsa el botón inferior de WhatsApp para enviarla directamente a nuestro equipo de ingeniería y recibir tu cotización inmediata.",
+            "He procesado tu solicitud con las tarifas oficiales de GuiporDI Soluciones. Pulsa el botón de WhatsApp para enviarme el resumen con la pregunta exacta.",
         },
         { status: 200 }
       );
     }
 
     const configSummary = config
-      ? `\n\n[CONFIGURACIÓN ACTUAL SELECCIONADA POR EL CLIENTE EN EL PANEL]:
-- Tipo de Entorno: ${config.environmentType || "Por definir"}
-- Rubro del Negocio: ${config.businessNiche || "No especificado aún"}
-- Integración de IA: ${config.aiModule || "Por definir"}
-- Recarga de Saldo API: ${config.apiRecharge || "No seleccionada"}
-- Activos Visuales Redes (Video/Imagen): ${config.mediaPack || "No seleccionado"}`
+      ? `\n\n[CONFIGURACIÓN ACTUAL SELECCIONADA POR EL CLIENTE]:
+- Tipo de Entorno: ${config.environmentType || "N/D"}
+- Rubro del Negocio: ${config.businessNiche || "N/D"}
+- Módulo IA: ${config.aiModule || "N/D"}
+- Recarga API: ${config.apiRecharge || "N/D"}
+- Redes (Video/Img): ${config.mediaPack || "N/D"}`
       : "";
 
     const apiMessages = [
-      { role: "system", content: SYSTEM_PROMPT + configSummary },
+      { role: "system", content: PRICING_RULES_PROMPT + configSummary },
       ...(Array.isArray(messages) ? messages.slice(-8) : []),
     ];
 
@@ -66,13 +81,12 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model,
         messages: apiMessages,
-        temperature: 0.6,
-        max_tokens: 550,
+        temperature: 0.4,
+        max_tokens: 450,
       }),
     });
 
     if (!response.ok) {
-      // Intento alternativo con formato /v1/messages nativo de Anthropic por si el proxy lo requiere
       const fallbackRes = await fetch(`${baseUrl}/v1/messages`, {
         method: "POST",
         headers: {
@@ -83,14 +97,14 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({
           model,
-          system: SYSTEM_PROMPT + configSummary,
+          system: PRICING_RULES_PROMPT + configSummary,
           messages: (Array.isArray(messages) ? messages.slice(-8) : []).map(
             (m: { role: string; content: string }) => ({
               role: m.role === "assistant" ? "assistant" : "user",
               content: m.content,
             })
           ),
-          max_tokens: 550,
+          max_tokens: 450,
         }),
       });
 
@@ -98,26 +112,26 @@ export async function POST(req: NextRequest) {
         const fbData = await fallbackRes.json();
         const fbText =
           fbData?.content?.[0]?.text ||
-          "Excelente elección. Tu configuración está lista para ser cotizada por WhatsApp.";
+          "Tu cotización ha sido calculada. Escríbenos al WhatsApp oficial para ultimar detalles.";
         return NextResponse.json({ reply: fbText });
       }
 
-      throw new Error(`Error del proveedor IA: ${response.status}`);
+      throw new Error(`Error API IA: ${response.status}`);
     }
 
     const data = await response.json();
     const reply =
       data?.choices?.[0]?.message?.content ||
       data?.content?.[0]?.text ||
-      "Tu configuración a medida está lista. Pulsa el botón de WhatsApp para recibir el presupuesto exacto.";
+      "Cotización estructurada con éxito. Envíanosla a través de nuestro WhatsApp oficial.";
 
     return NextResponse.json({ reply });
   } catch (error) {
-    console.error("Error en /api/ai-concierge:", error);
+    console.error("Error en /api/admin-erp:", error);
     return NextResponse.json(
       {
         reply:
-          "He procesado los módulos seleccionados en tu paquete personalizado. Puedes pulsar el botón de WhatsApp abajo para enviarnos el resumen técnico y darte el precio exacto de inmediato.",
+          "Hemos registrado tu selección de servicios. Pulsa el botón inferior para abrir el WhatsApp de Luis Castillo con tu cotización lista.",
       },
       { status: 200 }
     );
