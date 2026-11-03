@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { PROJECTS_DATA, ProjectItem } from "@/data/projects";
 
 // ============================================================================
-// 1. SHADER GLSL DE LAS TARJETAS CURVAS 3D DEL CARRUSEL (ESTILO ALCHE WORKS)
+// 1. SHADER GLSL DE LAS TARJETAS CURVAS 3D DEL CARRUSEL (ENCUADRE MÓVIL ÓPTIMO)
 // ============================================================================
 const projectCardVertexShader = /* glsl */ `
   uniform float uCardOffset;
@@ -21,14 +21,14 @@ const projectCardVertexShader = /* glsl */ `
     vUv = uv;
     vec3 pos = position;
 
+    // Curvatura cilíndrica sutil adaptada a la pantalla
     float localArch = (uv.x - 0.5);
-    float bendDepth = uIsMobile > 0.5 ? 0.26 : 0.48;
+    float bendDepth = uIsMobile > 0.5 ? 0.18 : 0.42;
     pos.z -= (localArch * localArch) * bendDepth;
 
-    float waveTwist = clamp(uScrollVelocity * 0.18, -0.25, 0.25);
+    float waveTwist = clamp(uScrollVelocity * 0.15, -0.2, 0.2);
     pos.z += sin((uv.x - 0.5) * 3.14159) * waveTwist;
-
-    pos.z += uHover * 0.14;
+    pos.z += uHover * 0.12;
 
     vBend = localArch;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -44,32 +44,38 @@ const projectCardFragmentShader = /* glsl */ `
   uniform float uActiveFactor;
   uniform float uTime;
   uniform vec3 uAccent;
+  uniform float uIsMobile;
 
   varying vec2 vUv;
   varying float vBend;
 
   void main() {
+    // En móvil usamos un ajuste de contención perfecto para que la captura vertical no se recorte
     vec2 ratio = vec2(
       min(uPlaneAspect / uImageAspect, 1.0),
       min(uImageAspect / uPlaneAspect, 1.0)
     );
 
-    float zoom = 1.0 - uHover * 0.03;
+    if (uIsMobile > 0.5) {
+      ratio = vec2(1.0, 1.0); // Cobertura completa sin deformación en teléfonos
+    }
+
+    float zoom = 1.0 - uHover * 0.025;
     vec2 sampleUv = (vUv - 0.5) * ratio * zoom + 0.5;
-    sampleUv = clamp(sampleUv, 0.002, 0.998);
+    sampleUv = clamp(sampleUv, 0.001, 0.999);
 
     vec3 imgCol = texture2D(uTexture, sampleUv).rgb;
 
-    float specularBand = exp(-pow((vUv.x - 0.5 + sin(uTime * 0.7) * 0.18) * 3.2, 2.0)) * 0.08;
+    float specularBand = exp(-pow((vUv.x - 0.5 + sin(uTime * 0.7) * 0.18) * 3.2, 2.0)) * 0.06;
     imgCol += vec3(specularBand);
 
-    float sideDim = mix(0.42, 1.0, uActiveFactor);
+    float sideDim = mix(0.45, 1.0, uActiveFactor);
     imgCol *= sideDim;
 
     vec2 borderDist = min(vUv, 1.0 - vUv);
     vec2 borderPx = borderDist / fwidth(vUv);
     float minBorderPx = min(borderPx.x, borderPx.y);
-    float borderLine = 1.0 - smoothstep(1.0, 2.2, minBorderPx);
+    float borderLine = 1.0 - smoothstep(1.0, 2.0, minBorderPx);
 
     vec3 frameColor = mix(vec3(0.35, 0.45, 0.48), uAccent + vec3(0.35), uActiveFactor * 0.7 + uHover * 0.3);
     vec3 finalCol = mix(imgCol, frameColor, borderLine * 0.85);
@@ -79,7 +85,7 @@ const projectCardFragmentShader = /* glsl */ `
 `;
 
 // ============================================================================
-// 2. TARJETA INDIVIDUAL 3D CURVA DEL CARRUSEL (ORDENADOR Y MÓVIL)
+// 2. TARJETA INDIVIDUAL 3D CURVA (OPTIMIZADA PARA MÓVIL Y ORDENADOR)
 // ============================================================================
 function CurvedProjectCardMesh({
   index,
@@ -109,16 +115,16 @@ function CurvedProjectCardMesh({
 
   const { cardWidth, cardHeight, planeAspect } = useMemo(() => {
     if (isMobile) {
-      const w = Math.min(viewport.width * 0.84, 2.75);
-      const clampedAspect = Math.min(Math.max(imageAspect, 0.78), 1.65);
-      const h = Math.min(w / clampedAspect, viewport.height * 0.44);
+      // Dimensiones proporcionales exactas para la pantalla vertical del celular
+      const w = Math.min(viewport.width * 0.78, 2.45);
+      const h = w * 1.32; // Formato vertical óptimo para '*-mobil.png'
       return { cardWidth: w, cardHeight: h, planeAspect: w / h };
     } else {
       const w = Math.min(viewport.width * 0.48, 5.45);
       const h = w * 0.575;
       return { cardWidth: w, cardHeight: h, planeAspect: w / h };
     }
-  }, [isMobile, viewport.width, viewport.height, imageAspect]);
+  }, [isMobile, viewport.width, viewport.height]);
 
   const uniforms = useMemo(
     () => ({
@@ -152,16 +158,17 @@ function CurvedProjectCardMesh({
     const activeFloat = Math.max(0, (s - 0.14) / 0.86) * (total - 1);
     const diff = index - activeFloat;
 
-    const spacingX = isMobile ? cardWidth * 1.16 : cardWidth * 1.14;
+    // Espaciado horizontal adaptado para móvil y ordenador
+    const spacingX = isMobile ? cardWidth * 1.08 : cardWidth * 1.14;
     const centerShiftX = isMobile ? 0.0 : 0.35;
-    const centerShiftY = isMobile ? 0.56 : 0.18;
+    const centerShiftY = isMobile ? 0.32 : 0.18; // Elevado en móvil para dejar espacio al HUD inferior
 
     const targetX = centerShiftX + diff * spacingX;
     const arcZ =
-      (isMobile ? 1.25 : 1.05) -
-      Math.pow(Math.abs(diff), 1.25) * (isMobile ? 0.65 : 0.95) -
+      (isMobile ? 1.1 : 1.05) -
+      Math.pow(Math.abs(diff), 1.25) * (isMobile ? 0.55 : 0.95) -
       (1.0 - carouselVisibility) * 3.2;
-    const arcRotY = -diff * (isMobile ? 0.16 : 0.22);
+    const arcRotY = -diff * (isMobile ? 0.12 : 0.22);
 
     meshRef.current.position.x = targetX;
     meshRef.current.position.y =
@@ -266,7 +273,7 @@ export function ProjectsCurvedCarousel3D({
             index={idx}
             project={proj}
             texture={tex}
-            imageAspect={aspect || (isMobile ? 0.65 : 1.77)}
+            imageAspect={aspect || (isMobile ? 0.75 : 1.77)}
             isMobile={isMobile}
             scrollRef={scrollRef}
             onSelectProject={onSelectProject}

@@ -114,8 +114,9 @@ function StudioScene({
 
   useFrame(() => {
     const prev = scrollRef.current.current;
-    const next = THREE.MathUtils.lerp(prev, scrollRef.current.target, 0.085);
-    scrollRef.current.velocity = (next - prev) * 18.0;
+    // Interpolación suave y amortiguada para evitar movimientos bruscos
+    const next = THREE.MathUtils.lerp(prev, scrollRef.current.target, 0.075);
+    scrollRef.current.velocity = (next - prev) * 14.0;
     scrollRef.current.current = next;
 
     const inWorks = next > 0.09 && next < 1.03;
@@ -186,7 +187,7 @@ function StudioScene({
 }
 
 // ============================================================================
-// 2. PÁGINA PRINCIPAL COMPLETA (INTRO + ESCENA 3D + CARRUSEL + VISIÓN + AUDIO)
+// 2. PÁGINA PRINCIPAL COMPLETA (FIX MÓVIL, GIROSCOPIO Y HERO LANZAMIENTOS)
 // ============================================================================
 export default function GuiporDIStudioPage() {
   const MAX_SCROLL = 2.15;
@@ -195,6 +196,7 @@ export default function GuiporDIStudioPage() {
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const scrollRef = useRef({ current: 0, target: 0, velocity: 0 });
   const touchStartRef = useRef({ x: 0, y: 0 });
+  const gyroBaseBetaRef = useRef<number | null>(null);
 
   const [showIntro, setShowIntro] = useState(true);
   const [normalVec, setNormalVec] = useState({ x: 0.0, y: -0.08, z: 1.0 });
@@ -216,7 +218,6 @@ export default function GuiporDIStudioPage() {
 
   const activeProject = PROJECTS_DATA[activeProjectIdx] || PROJECTS_DATA[0];
 
-  // Motor de Audio Espacial Web Audio API
   const { triggerHarmonicChime } = useSpatialAudioEngine(
     soundEnabled,
     activeProjectIdx,
@@ -228,6 +229,27 @@ export default function GuiporDIStudioPage() {
     scrollProgress < 1.42 &&
     !showAllWorksGrid &&
     !selectedProject;
+
+  // Solicitar permiso de giroscopio en iOS (si aplica) al interactuar
+  const requestMobileGyroPermission = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof (
+        DeviceOrientationEvent as unknown as {
+          requestPermission?: () => Promise<string>;
+        }
+      ).requestPermission === "function"
+    ) {
+      (
+        DeviceOrientationEvent as unknown as {
+          requestPermission: () => Promise<string>;
+        }
+      )
+        .requestPermission()
+        .catch(() => {});
+    }
+  }, []);
 
   const navigateToScroll = useCallback((targetVal: number) => {
     scrollRef.current.target = Math.min(Math.max(targetVal, 0), MAX_SCROLL);
@@ -250,6 +272,22 @@ export default function GuiporDIStudioPage() {
     navigateToScroll(0);
   }, [navigateToScroll]);
 
+  // Bloqueo de Pull-to-Refresh nativo en html y body para que jamás se recargue la web al bajar el dedo
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverscroll = html.style.overscrollBehaviorY;
+    const prevBodyOverscroll = body.style.overscrollBehaviorY;
+
+    html.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+
+    return () => {
+      html.style.overscrollBehaviorY = prevHtmlOverscroll;
+      body.style.overscrollBehaviorY = prevBodyOverscroll;
+    };
+  }, []);
+
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
@@ -266,10 +304,36 @@ export default function GuiporDIStudioPage() {
       lastMouseRef.current.y = ny;
     };
 
+    // Giroscopio en Celular: Inclina la G, el texto y la pared LED según cómo gires el teléfono
+    const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
+      if (e.gamma === null || e.beta === null) return;
+
+      if (gyroBaseBetaRef.current === null) {
+        gyroBaseBetaRef.current = e.beta;
+      }
+
+      // gamma: inclinación izquierda/derecha (-35° a +35°)
+      const tiltX = THREE.MathUtils.clamp(e.gamma / 28, -1, 1);
+      // beta: inclinación adelante/atrás relativa a cómo sostiene el teléfono
+      const deltaBeta = e.beta - (gyroBaseBetaRef.current || 45);
+      const tiltY = THREE.MathUtils.clamp(-deltaBeta / 28, -1, 1);
+
+      const dx = tiltX - lastMouseRef.current.x;
+      const dy = tiltY - lastMouseRef.current.y;
+      const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 5.0, 1.2);
+
+      mouseRef.current.x = THREE.MathUtils.lerp(mouseRef.current.x, tiltX, 0.35);
+      mouseRef.current.y = THREE.MathUtils.lerp(mouseRef.current.y, tiltY, 0.35);
+      mouseRef.current.speed = speed;
+
+      lastMouseRef.current.x = mouseRef.current.x;
+      lastMouseRef.current.y = mouseRef.current.y;
+    };
+
     const handleWheel = (e: WheelEvent) => {
       if (showIntro || selectedProject || showAllWorksGrid || mobileMenuOpen)
         return;
-      const delta = e.deltaY * 0.00052;
+      const delta = e.deltaY * 0.00045;
       scrollRef.current.target = Math.min(
         Math.max(scrollRef.current.target + delta, 0),
         MAX_SCROLL
@@ -284,20 +348,44 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (showIntro || selectedProject || showAllWorksGrid || mobileMenuOpen)
-        return;
+      // Si hay un modal abierto con su propio scroll interno, permitimos el scroll del modal
+      if (selectedProject || showAllWorksGrid || mobileMenuOpen) return;
+
+      // CRÍTICO: Evita que Chrome/Safari en el celular disparen Pull-to-Refresh y reinicien la página
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      if (showIntro) return;
+
       if (e.touches.length > 0) {
-        const dy = touchStartRef.current.y - e.touches[0].clientY;
-        const dx = touchStartRef.current.x - e.touches[0].clientX;
-        const combinedDelta =
-          Math.abs(dx) > Math.abs(dy) ? dx * 0.0018 : dy * 0.0018;
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        const dy = touchStartRef.current.y - touchY;
+        const dx = touchStartRef.current.x - touchX;
+
+        // También actualizamos la posición interactiva con el dedo en pantalla móvil
+        const nx = (touchX / window.innerWidth) * 2 - 1;
+        const ny = -(touchY / window.innerHeight) * 2 + 1;
+        mouseRef.current.x = nx;
+        mouseRef.current.y = ny;
+        mouseRef.current.speed = Math.min(
+          Math.sqrt(dx * dx + dy * dy) * 0.04,
+          1.2
+        );
+
+        // Sensibilidad táctil 3.5 veces más suave y con tope máximo por fotograma (Cero saltos violentos)
+        const rawDelta =
+          Math.abs(dx) > Math.abs(dy) ? dx * 0.00055 : dy * 0.00052;
+        const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
 
         scrollRef.current.target = Math.min(
-          Math.max(scrollRef.current.target + combinedDelta, 0),
+          Math.max(scrollRef.current.target + clampedDelta, 0),
           MAX_SCROLL
         );
-        touchStartRef.current.x = e.touches[0].clientX;
-        touchStartRef.current.y = e.touches[0].clientY;
+
+        touchStartRef.current.x = touchX;
+        touchStartRef.current.y = touchY;
       }
     };
 
@@ -321,13 +409,20 @@ export default function GuiporDIStudioPage() {
     };
 
     window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("deviceorientation", handleDeviceOrientation, true);
     window.addEventListener("wheel", handleWheel, { passive: true });
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    // passive: false es indispensable para bloquear el pull-to-refresh cuando se sube en móvil
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener(
+        "deviceorientation",
+        handleDeviceOrientation,
+        true
+      );
       window.removeEventListener("wheel", handleWheel);
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchmove", handleTouchMove);
@@ -349,7 +444,7 @@ export default function GuiporDIStudioPage() {
     (idx: number, inWorks: boolean, progress: number) => {
       setActiveProjectIdx(idx);
       setInWorksSection(inWorks);
-      if (Math.abs(progress - scrollProgress) > 0.004) {
+      if (Math.abs(progress - scrollProgress) > 0.003) {
         setScrollProgress(progress);
       }
     },
@@ -365,9 +460,12 @@ export default function GuiporDIStudioPage() {
     [triggerHarmonicChime]
   );
 
+  const isHeroVisible =
+    scrollProgress <= 0.08 && !showAllWorksGrid && !selectedProject;
+
   return (
-    <main className="relative w-full h-screen overflow-hidden bg-[#020304] text-white select-none font-sans">
-      {/* 0. INTRO CINÉTICA DE COMPÁS ARQUITECTÓNICO + PORTAL ÓPTICO */}
+    <main className="relative w-full h-[100dvh] overflow-hidden overscroll-none bg-[#020304] text-white select-none font-sans">
+      {/* 0. INTRO CINÉTICA DE COMPÁS ARQUITECTÓNICO */}
       {showIntro && (
         <ArchitecturalCompassIntro onFinish={() => setShowIntro(false)} />
       )}
@@ -402,7 +500,7 @@ export default function GuiporDIStudioPage() {
 
       {/* 3. HEADER SUPERIOR DUAL */}
       <header
-        className={`fixed top-0 left-0 right-0 z-40 w-full px-5 md:px-12 lg:px-16 py-5 md:py-6 flex items-center justify-between transition-colors duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-40 w-full px-5 md:px-12 lg:px-16 py-4 md:py-6 flex items-center justify-between transition-colors duration-300 ${
           isLightVisionMode ? "text-black" : "text-white"
         }`}
       >
@@ -520,8 +618,8 @@ export default function GuiporDIStudioPage() {
 
       {/* 4. MENÚ MÓVIL TIPO ALCHE */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col justify-between px-7 pt-28 pb-12 md:hidden">
-          <div className="space-y-5 font-mono">
+        <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col justify-between px-7 pt-24 pb-20 md:hidden">
+          <div className="space-y-4 font-mono">
             {[
               { label: "Inicio", action: scrollToTopHero },
               {
@@ -559,7 +657,7 @@ export default function GuiporDIStudioPage() {
             ))}
           </div>
 
-          <div className="font-mono text-xs text-white/50 space-y-2 border-t border-white/15 pt-6">
+          <div className="font-mono text-xs text-white/50 space-y-2 border-t border-white/15 pt-5">
             <p className="text-emerald-400 uppercase tracking-widest">
               GuiporDI Soluciones
             </p>
@@ -610,7 +708,7 @@ export default function GuiporDIStudioPage() {
         </aside>
       )}
 
-      {/* 6. INDICADOR LATERAL IZQUIERDO DE SECCIONES */}
+      {/* 6. INDICADOR LATERAL IZQUIERDO DE SECCIONES (PC) */}
       <div
         className={`hidden md:flex fixed left-6 md:left-12 top-1/2 -translate-y-1/2 z-30 flex-col gap-3 font-mono text-[10px] tracking-[0.25em] uppercase ${
           isLightVisionMode ? "text-black" : "text-white"
@@ -656,80 +754,100 @@ export default function GuiporDIStudioPage() {
         ))}
       </div>
 
-      {/* 7. HUD ESTADO 1: HERO INICIAL */}
+      {/* 7. HUD ESTADO 1: HERO INICIAL (SIN TRANSFORM PADRE QUE ROMPA FIXED) */}
+      {/* 7A. Indicador Vertical "Desliza para explorar" (Móvil y PC) */}
       <div
-        className={`transition-all duration-500 ${
-          scrollProgress > 0.08
-            ? "opacity-0 pointer-events-none translate-y-6"
-            : "opacity-100 translate-y-0"
+        className={`fixed right-3.5 sm:right-6 bottom-28 sm:bottom-24 z-20 flex flex-col items-center gap-2 transition-opacity duration-500 ${
+          isHeroVisible
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="md:hidden fixed right-4 bottom-24 z-20 flex flex-col items-center gap-2 pointer-events-none">
-          <span
-            className="font-mono text-[10px] tracking-[0.25em] text-white/65 uppercase"
-            style={{ writingMode: "vertical-rl" }}
-          >
-            desliza para explorar
+        <button
+          onClick={() => scrollToProjectIndex(0)}
+          className="font-mono text-[9px] sm:text-[10px] tracking-[0.26em] text-white/75 hover:text-emerald-400 uppercase cursor-pointer"
+          style={{ writingMode: "vertical-rl" }}
+        >
+          scroll to explore
+        </button>
+        <span className="w-[1px] h-10 bg-gradient-to-b from-emerald-400 via-emerald-400/50 to-transparent animate-pulse" />
+      </div>
+
+      {/* 7B. Bloque "Últimos Lanzamientos" (Visible en Hero tanto en Celular como en PC) */}
+      <section
+        className={`fixed left-5 right-12 sm:left-auto sm:right-12 lg:right-16 ${
+          showSoundPrompt ? "bottom-24 sm:bottom-20" : "bottom-14 sm:bottom-16"
+        } z-20 sm:w-[350px] font-mono transition-opacity duration-500 ${
+          isHeroVisible
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="text-[10px] tracking-[0.26em] uppercase text-emerald-400 mb-2 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3" />
+            <span>Últimos Lanzamientos</span>
           </span>
-          <span className="w-[1px] h-8 bg-gradient-to-b from-emerald-400 to-transparent" />
+          <button
+            onClick={() => scrollToProjectIndex(0)}
+            className="text-white/70 hover:text-white underline cursor-pointer text-[10px]"
+          >
+            Explorar 3D ↓
+          </button>
         </div>
 
-        <section className="fixed bottom-16 md:bottom-20 left-5 right-12 sm:left-auto sm:right-6 md:right-12 lg:right-16 z-20 sm:w-[350px] font-mono">
-          <div className="text-[10px] tracking-[0.28em] uppercase text-emerald-400/90 mb-2.5 flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-3 h-3" />
-              <span>Proyectos Recientes</span>
-            </span>
-            <button
-              onClick={() => scrollToProjectIndex(0)}
-              className="text-white/60 hover:text-white underline cursor-pointer"
+        {/* En móvil mostramos los 2 más recientes (igual a Alche Móvil 00:08) y en PC los 4 */}
+        <div className="space-y-2 border-t border-white/20 pt-2 bg-black/35 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none p-2.5 sm:p-0 rounded-lg sm:rounded-none">
+          {PROJECTS_DATA.slice(0, 4).map((item, idx) => (
+            <div
+              key={item.slug}
+              onClick={() => scrollToProjectIndex(idx)}
+              className={`${
+                idx >= 2 ? "hidden sm:block" : "block"
+              } group border-b border-white/10 pb-1.5 cursor-pointer transition-all duration-200 hover:border-emerald-400/50`}
             >
-              Explorar 3D ↓
-            </button>
-          </div>
-          <div className="space-y-2.5 border-t border-white/15 pt-2.5">
-            {PROJECTS_DATA.slice(0, 4).map((item, idx) => (
-              <div
-                key={item.slug}
-                onClick={() => scrollToProjectIndex(idx)}
-                className="group border-b border-white/10 pb-2 cursor-pointer transition-all duration-200 hover:border-emerald-400/50"
-              >
-                <p className="text-[10px] text-white/45 group-hover:text-emerald-400 transition-colors">
-                  {item.date}
-                </p>
-                <p className="text-xs text-white/85 group-hover:text-white group-hover:translate-x-1 transition-all truncate">
-                  {item.title}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div className="fixed bottom-20 left-6 md:left-12 lg:left-16 z-20 pointer-events-none hidden sm:block">
-          <p className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">
-            ARQUITECTURA DE SOFTWARE & EXPERIENCIAS WEBGL
-          </p>
-          <p className="font-mono text-xs text-white/80 mt-1">
-            Haz scroll hacia abajo para recorrer proyectos, visión y ecosistema.
-          </p>
+              <p className="text-[10px] text-white/50 group-hover:text-emerald-400 transition-colors">
+                {item.date}
+              </p>
+              <p className="text-xs text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all truncate">
+                {item.title}
+              </p>
+            </div>
+          ))}
         </div>
+      </section>
+
+      {/* 7C. Coordenadas Técnicas Abajo a la Izquierda en Hero (PC) */}
+      <div
+        className={`fixed bottom-20 left-6 md:left-12 lg:left-16 z-20 pointer-events-none hidden sm:block transition-opacity duration-500 ${
+          isHeroVisible ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <p className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">
+          ARQUITECTURA DE SOFTWARE & EXPERIENCIAS WEBGL
+        </p>
+        <p className="font-mono text-xs text-white/80 mt-1">
+          Desliza para explorar nuestros 9 proyectos en tiempo real.
+        </p>
       </div>
 
       {/* 8. HUD ESTADO 2: CARRUSEL DE PROYECTOS */}
       <div
-        className={`fixed inset-x-0 bottom-14 md:bottom-16 z-20 px-5 md:px-12 lg:px-16 transition-all duration-500 ${
+        className={`fixed inset-x-0 ${
+          showSoundPrompt ? "bottom-20 sm:bottom-16" : "bottom-12 sm:bottom-14"
+        } z-20 px-4 sm:px-6 md:px-12 lg:px-16 transition-opacity duration-500 ${
           inWorksSection && !showAllWorksGrid && !selectedProject
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 translate-y-8 pointer-events-none"
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="max-w-[1720px] mx-auto flex flex-col md:flex-row md:items-end justify-between gap-5">
-          <div className="max-w-2xl space-y-2.5 bg-black/45 md:bg-transparent backdrop-blur-md md:backdrop-blur-none p-4 md:p-0 rounded-xl border border-white/10 md:border-none">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
-              <span className="text-white/80 font-semibold tracking-wider">
+        <div className="max-w-[1720px] mx-auto flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-5">
+          <div className="max-w-2xl space-y-2 bg-black/65 md:bg-transparent backdrop-blur-md md:backdrop-blur-none p-3.5 sm:p-4 md:p-0 rounded-xl border border-white/15 md:border-none">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+              <span className="text-white/85 font-semibold tracking-wider">
                 {activeProject.date}
               </span>
-              <span className="px-2.5 py-0.5 rounded-sm bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[11px]">
+              <span className="px-2 py-0.5 rounded-sm bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-[11px] line-clamp-1">
                 {activeProject.highlightBadge}
               </span>
             </div>
@@ -738,19 +856,19 @@ export default function GuiporDIStudioPage() {
               onClick={() => openProjectModal(activeProject)}
               className="group cursor-pointer"
             >
-              <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors leading-tight">
+              <h2 className="text-lg sm:text-2xl md:text-4xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors leading-snug">
                 {activeProject.title}
               </h2>
-              <p className="font-mono text-[10px] sm:text-xs text-white/60 tracking-widest uppercase mt-1">
+              <p className="font-mono text-[9px] sm:text-xs text-white/60 tracking-widest uppercase mt-0.5 truncate">
                 {activeProject.subtitle}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
               {activeProject.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2.5 py-1 text-[10px] font-mono tracking-wider border border-white/25 bg-black/50 text-white/85"
+                  className="px-2 py-0.5 text-[9px] sm:text-[10px] font-mono tracking-wider border border-white/25 bg-black/50 text-white/85"
                 >
                   {tag}
                 </span>
@@ -758,12 +876,12 @@ export default function GuiporDIStudioPage() {
             </div>
           </div>
 
-          <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-4 font-mono">
+          <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-3 font-mono px-1 sm:px-0">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => scrollToProjectIndex(activeProjectIdx - 1)}
                 disabled={activeProjectIdx === 0}
-                className="w-8 h-8 rounded-full border border-white/25 bg-black/50 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
+                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
                 aria-label="Proyecto anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -784,35 +902,35 @@ export default function GuiporDIStudioPage() {
                 ))}
               </div>
 
-              <span className="text-xs text-white/80 px-1">
+              <span className="text-xs text-white/85 px-1">
                 {activeProject.id} / 09
               </span>
 
               <button
                 onClick={() => scrollToProjectIndex(activeProjectIdx + 1)}
                 disabled={activeProjectIdx === PROJECTS_DATA.length - 1}
-                className="w-8 h-8 rounded-full border border-white/25 bg-black/50 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
+                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
                 aria-label="Siguiente proyecto"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => openProjectModal(activeProject)}
-                className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer"
               >
-                <span>Inspeccionar Proyecto</span>
+                <span>Ver Proyecto</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={() => setShowAllWorksGrid(true)}
-                className="inline-flex items-center gap-2 text-xs sm:text-sm font-mono tracking-wider text-white border-b border-white/60 pb-1 hover:text-emerald-400 hover:border-emerald-400 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-mono tracking-wider text-white border-b border-white/60 pb-0.5 hover:text-emerald-400 hover:border-emerald-400 transition-colors cursor-pointer"
               >
                 <span>Más Proyectos</span>
-                <ArrowUpRight className="w-4 h-4" />
+                <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -840,7 +958,10 @@ export default function GuiporDIStudioPage() {
       {!showSoundPrompt && (
         <PersistentSoundAndIntroBadge
           soundEnabled={soundEnabled}
-          onToggleSound={() => setSoundEnabled((prev) => !prev)}
+          onToggleSound={() => {
+            requestMobileGyroPermission();
+            setSoundEnabled((prev) => !prev);
+          }}
           onReplayIntro={() => {
             scrollToTopHero();
             setShowIntro(true);
@@ -849,13 +970,16 @@ export default function GuiporDIStudioPage() {
         />
       )}
 
-      {/* 11. BARRA INFERIOR DE BIENVENIDA DE SONIDO */}
+      {/* 11. BARRA INFERIOR DE BIENVENIDA DE SONIDO (SIN TEXTO CORTADO EN MÓVIL) */}
       {showSoundPrompt && (
-        <footer className="fixed bottom-0 left-0 right-0 z-40 bg-black/85 backdrop-blur-xl border-t border-white/10 px-5 md:px-12 lg:px-16 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-3 text-[11px] sm:text-xs font-mono text-white/80">
+        <footer className="fixed bottom-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-xl border-t border-white/15 px-4 sm:px-8 md:px-12 lg:px-16 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2.5 text-[10px] sm:text-xs font-mono text-white/85 text-center sm:text-left">
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center hover:border-emerald-400 transition-colors cursor-pointer shrink-0"
+              onClick={() => {
+                requestMobileGyroPermission();
+                setSoundEnabled(!soundEnabled);
+              }}
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-white/25 flex items-center justify-center hover:border-emerald-400 transition-colors cursor-pointer shrink-0"
             >
               {soundEnabled ? (
                 <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -863,27 +987,29 @@ export default function GuiporDIStudioPage() {
                 <VolumeX className="w-3.5 h-3.5 text-white/50" />
               )}
             </button>
-            <span className="truncate">
-              Este sitio interactivo utiliza efectos de audio espacial y shaders en tiempo real.
+            <span className="leading-tight">
+              Este sitio utiliza audio espacial y shaders 3D interactivos.
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center gap-3 w-full sm:w-auto">
             <button
               onClick={() => {
+                requestMobileGyroPermission();
                 setSoundEnabled(true);
                 setShowSoundPrompt(false);
               }}
-              className="px-3.5 py-1 rounded-full border border-white/30 bg-white/10 hover:bg-white hover:text-black text-[11px] font-mono transition-all cursor-pointer"
+              className="px-4 py-1 rounded-full border border-white/30 bg-white/10 hover:bg-white hover:text-black text-[10px] sm:text-[11px] font-mono transition-all cursor-pointer"
             >
               Activar sonido
             </button>
             <button
               onClick={() => {
+                requestMobileGyroPermission();
                 setSoundEnabled(false);
                 setShowSoundPrompt(false);
               }}
-              className="px-3.5 py-1 rounded-full text-[11px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
+              className="px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-mono text-white/55 hover:text-white transition-colors cursor-pointer"
             >
               Continuar sin sonido
             </button>

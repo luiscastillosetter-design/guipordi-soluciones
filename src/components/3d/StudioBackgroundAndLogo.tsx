@@ -7,9 +7,13 @@ import * as THREE from "three";
 import { PROJECTS_DATA } from "@/data/projects";
 
 // ============================================================================
-// 1. SHADER GLSL DE LA PARED LED PLANA CON SURCOS NEGROS + REFLEJO DEL CARRUSEL
+// 1. SHADER GLSL DE LA PARED LED CON EFECTO LÍQUIDO TIPO "FLOR DE AGUA" Y MOVIMIENTO 3D
 // ============================================================================
 const ledWallVertexShader = /* glsl */ `
+  uniform float uTime;
+  uniform vec2 uMouse;
+  uniform float uScrollProgress;
+
   varying vec2 vUv;
   varying vec3 vWorldPos;
 
@@ -17,10 +21,15 @@ const ledWallVertexShader = /* glsl */ `
     vUv = uv;
     vec3 pos = position;
 
+    // Curvatura cóncava envolvente
     float nx = pos.x / 19.0;
     float ny = pos.y / 11.0;
     float r2 = nx * nx + ny * ny;
     pos.z += r2 * 6.8;
+
+    // Movimiento espacial 3D orgánico de los paneles LED sincronizado con el scroll y el mouse
+    pos.x += sin(uTime * 0.3 + pos.y * 0.15) * 0.12 + uMouse.x * 0.25;
+    pos.y += cos(uTime * 0.25 + pos.x * 0.15) * 0.10 + uMouse.y * 0.20;
 
     vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
     vWorldPos = worldPosition.xyz;
@@ -92,10 +101,22 @@ const ledWallFragmentShader = /* glsl */ `
     vec2 activePanelUv = mix(fract(vUv * cabinetGrid), fract(vUv * subPanelGrid), isSplit);
     float activeRand   = mix(randCab, randSub, isSplit);
 
-    vec2 centered = (vUv - 0.5) * vec2(1.77, 1.0);
+    // ========================================================================
+    // EFECTO LÍQUIDO "FLOR DE AGUA" (RIPPLE / FLOWMAP INTERACTIVO CON EL CURSOR)
+    // ========================================================================
+    vec2 mouseUv = uMouse * 0.5 + 0.5;
+    vec2 toMouse = vUv - mouseUv;
+    toMouse.x *= 1.77; // Corrección de aspecto
+    float distToMouse = length(toMouse);
+
+    // Onda concéntrica expansiva tipo onda en el agua al mover el cursor
+    float ripple = sin(distToMouse * 35.0 - uTime * 6.0) * exp(-distToMouse * 4.5) * (0.018 + uMouseSpeed * 0.045);
+    vec2 fluidUv = vUv + normalize(toMouse + 0.0001) * ripple;
+
+    vec2 centered = (fluidUv - 0.5) * vec2(1.77, 1.0);
     float distCenter = length(centered);
 
-    float kineticLuma = texture2D(uKineticTextTex, vUv).r;
+    float kineticLuma = texture2D(uKineticTextTex, fluidUv).r;
 
     float t = uTime * 0.35;
     float slowField = noise(centered * 2.5 + vec2(t * 0.35, -t * 0.2));
@@ -112,7 +133,7 @@ const ledWallFragmentShader = /* glsl */ `
 
     if (uCarouselBlend > 0.001) {
       vec2 panelCenterUv = (activePanelId + 0.5) / activePanelGrid;
-      vec2 projSampleUv = mix(vUv, panelCenterUv, 0.38);
+      vec2 projSampleUv = mix(fluidUv, panelCenterUv, 0.38);
       vec2 framedUv = clamp((projSampleUv - 0.5) * vec2(1.15, 1.25) + 0.5, 0.02, 0.98);
 
       vec3 texA = texture2D(uProjTexCurr, framedUv).rgb;
@@ -134,34 +155,32 @@ const ledWallFragmentShader = /* glsl */ `
     float watermark = moduleWatermarkG(activePanelUv);
     screenColor *= (1.0 + watermark * 0.14);
 
-    vec2 mouseUv = uMouse * 0.5 + 0.5;
-    float distMouse = length((vUv - mouseUv) * vec2(1.77, 1.0));
-    float mouseGlow = exp(-distMouse * 7.0) * (0.30 + uMouseSpeed * 0.95);
-    screenColor += mix(vec3(0.05, 0.35, 0.28), uAccentColor, uCarouselBlend) * mouseGlow;
+    float mouseGlow = exp(-distToMouse * 6.0) * (0.35 + uMouseSpeed * 1.2);
+    screenColor += mix(vec3(0.08, 0.45, 0.38), uAccentColor * 1.4, uCarouselBlend) * mouseGlow;
 
-    float ledPixelGroove = crispGroove(vUv, ledMatrixGrid, 0.72);
+    float ledPixelGroove = crispGroove(fluidUv, ledMatrixGrid, 0.72);
     screenColor *= (1.0 - ledPixelGroove * 0.52);
 
-    float subPanelGroove = crispGroove(vUv, subPanelGrid, 1.35) * isSplit;
-    float cabinetGroove = crispGroove(vUv, cabinetGrid, 1.85);
-    float macroGroove = crispGroove(vUv, macroGrid, 2.55);
+    float subPanelGroove = crispGroove(fluidUv, subPanelGrid, 1.35) * isSplit;
+    float cabinetGroove = crispGroove(fluidUv, cabinetGrid, 1.85);
+    float macroGroove = crispGroove(fluidUv, macroGrid, 2.55);
 
     float totalBlackTrench = clamp(max(max(macroGroove, cabinetGroove * 0.92), subPanelGroove * 0.82), 0.0, 1.0);
 
     vec3 chassisBlack = vec3(0.005, 0.007, 0.009);
     screenColor = mix(screenColor, chassisBlack, totalBlackTrench);
 
-    float lipHighlight = crispGroove(vUv + vec2(0.0004, -0.0006), macroGrid, 1.0) * (1.0 - macroGroove);
+    float lipHighlight = crispGroove(fluidUv + vec2(0.0004, -0.0006), macroGrid, 1.0) * (1.0 - macroGroove);
     screenColor += vec3(0.08, 0.16, 0.14) * lipHighlight * 0.55;
 
-    vec2 crossUv = fract(vUv * macroGrid + 0.5) - 0.5;
-    vec2 crossDeriv = fwidth(vUv * macroGrid);
+    vec2 crossUv = fract(fluidUv * macroGrid + 0.5) - 0.5;
+    vec2 crossDeriv = fwidth(fluidUv * macroGrid);
     float armH = (1.0 - smoothstep(0.0, crossDeriv.y * 1.15, abs(crossUv.y))) * step(abs(crossUv.x), 0.024);
     float armV = (1.0 - smoothstep(0.0, crossDeriv.x * 1.15, abs(crossUv.x))) * step(abs(crossUv.y), 0.024);
     float plusSymbol = max(armH, armV);
 
-    vec2 subCrossUv = fract(vUv * cabinetGrid + 0.5) - 0.5;
-    vec2 subCrossDeriv = fwidth(vUv * cabinetGrid);
+    vec2 subCrossUv = fract(fluidUv * cabinetGrid + 0.5) - 0.5;
+    vec2 subCrossDeriv = fwidth(fluidUv * cabinetGrid);
     float subArmH = (1.0 - smoothstep(0.0, subCrossDeriv.y * 1.05, abs(subCrossUv.y))) * step(abs(subCrossUv.x), 0.020);
     float subArmV = (1.0 - smoothstep(0.0, subCrossDeriv.x * 1.05, abs(subCrossUv.x))) * step(abs(subCrossUv.y), 0.020);
     float subPlusSymbol = max(subArmH, subArmV) * (1.0 - plusSymbol);
@@ -177,7 +196,7 @@ const ledWallFragmentShader = /* glsl */ `
 `;
 
 // ============================================================================
-// 2. COMPONENTE DE LA BÓVEDA LED PROFUNDA EN 3D
+// 2. COMPONENTE DE LA BÓVEDA LED PROFUNDA CON MOVIMIENTO 3D VIVO
 // ============================================================================
 export function CurvedLEDWall({
   mouseRef,
@@ -197,6 +216,7 @@ export function CurvedLEDWall({
     mobileAspects: number[];
   };
 }) {
+  const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const { size } = useThree();
   const isMobile = size.width < 768;
@@ -216,6 +236,7 @@ export function CurvedLEDWall({
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector2(0, 0) },
       uMouseSpeed: { value: 0 },
+      uScrollProgress: { value: 0 },
       uKineticTextTex: { value: kineticTexture },
       uProjTexCurr: { value: kineticTexture },
       uProjTexNext: { value: kineticTexture },
@@ -257,8 +278,9 @@ export function CurvedLEDWall({
       kineticTexture.needsUpdate = true;
     }
 
-    if (!materialRef.current) return;
+    if (!materialRef.current || !meshRef.current) return;
     materialRef.current.uniforms.uTime.value = t;
+    materialRef.current.uniforms.uScrollProgress.value = s;
     materialRef.current.uniforms.uMouse.value.lerp(
       new THREE.Vector2(mouseRef.current.x, mouseRef.current.y),
       0.08
@@ -267,6 +289,18 @@ export function CurvedLEDWall({
       materialRef.current.uniforms.uMouseSpeed.value,
       mouseRef.current.speed,
       0.08
+    );
+
+    // Movimiento 3D físico inercial de la malla LED según el cursor o giroscopio
+    meshRef.current.rotation.y = THREE.MathUtils.lerp(
+      meshRef.current.rotation.y,
+      mouseRef.current.x * 0.08,
+      0.06
+    );
+    meshRef.current.rotation.x = THREE.MathUtils.lerp(
+      meshRef.current.rotation.x,
+      -mouseRef.current.y * 0.06,
+      0.06
     );
 
     const carouselBlend = THREE.MathUtils.smoothstep(s, 0.05, 0.16);
@@ -302,7 +336,7 @@ export function CurvedLEDWall({
   });
 
   return (
-    <mesh position={[0, 0, -14.5]}>
+    <mesh ref={meshRef} position={[0, 0, -14.5]}>
       <planeGeometry args={[46, 27, 192, 112]} />
       <shaderMaterial
         ref={materialRef}
@@ -406,12 +440,12 @@ export function BrandTypographyPlane({
       heroMeshRef.current.visible = heroOpacity > 0.01;
       heroMeshRef.current.position.x = THREE.MathUtils.lerp(
         heroMeshRef.current.position.x,
-        -mouseRef.current.x * 0.14,
+        -mouseRef.current.x * 0.18,
         0.06
       );
       heroMeshRef.current.position.y = THREE.MathUtils.lerp(
         heroMeshRef.current.position.y,
-        0.04 - mouseRef.current.y * 0.08 + s * 2.2,
+        0.04 - mouseRef.current.y * 0.12 + s * 2.2,
         0.08
       );
     }
@@ -420,10 +454,10 @@ export function BrandTypographyPlane({
       worksMatRef.current.opacity = worksOpacity;
       worksMeshRef.current.visible = worksOpacity > 0.01;
       worksMeshRef.current.rotation.z = -0.05;
-      worksMeshRef.current.rotation.y = 0.12 - mouseRef.current.x * 0.08;
+      worksMeshRef.current.rotation.y = 0.12 - mouseRef.current.x * 0.1;
       worksMeshRef.current.position.x = THREE.MathUtils.lerp(
         worksMeshRef.current.position.x,
-        -mouseRef.current.x * 0.18,
+        -mouseRef.current.x * 0.22,
         0.06
       );
     }
@@ -460,7 +494,7 @@ export function BrandTypographyPlane({
 }
 
 // ============================================================================
-// 4. MONOLITO ARQUITECTÓNICO "G" CON ROTACIÓN DE SCROLL
+// 4. MONOLITO ARQUITECTÓNICO "G" CON ROTACIÓN DE SCROLL Y GIROSCOPIO
 // ============================================================================
 export function ArchitecturalGlassMonolithG({
   mouseRef,
@@ -561,25 +595,25 @@ export function ArchitecturalGlassMonolithG({
     const scrollPosX = THREE.MathUtils.smoothstep(s, 0.05, 0.18) * -0.45;
 
     const targetRotY =
-      mouseRef.current.x * 0.38 + Math.sin(t * 0.4) * 0.05 + scrollSpinY;
+      mouseRef.current.x * 0.55 + Math.sin(t * 0.4) * 0.05 + scrollSpinY;
     const targetRotX =
-      -mouseRef.current.y * 0.24 + Math.cos(t * 0.32) * 0.035 + scrollTiltX;
-    const targetRotZ = -mouseRef.current.x * 0.04;
+      -mouseRef.current.y * 0.42 + Math.cos(t * 0.32) * 0.035 + scrollTiltX;
+    const targetRotZ = -mouseRef.current.x * 0.06;
 
     groupRef.current.rotation.y = THREE.MathUtils.lerp(
       groupRef.current.rotation.y,
       targetRotY,
-      0.06
+      0.08
     );
     groupRef.current.rotation.x = THREE.MathUtils.lerp(
       groupRef.current.rotation.x,
       targetRotX,
-      0.06
+      0.08
     );
     groupRef.current.rotation.z = THREE.MathUtils.lerp(
       groupRef.current.rotation.z,
       targetRotZ,
-      0.06
+      0.08
     );
 
     groupRef.current.position.z = THREE.MathUtils.lerp(
