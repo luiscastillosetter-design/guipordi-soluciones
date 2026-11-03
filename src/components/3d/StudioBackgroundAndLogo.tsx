@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { PROJECTS_DATA } from "@/data/projects";
 
 // ============================================================================
-// 1. SHADER GLSL DE LA PARED LED CON EFECTO LÍQUIDO TIPO "FLOR DE AGUA" Y MOVIMIENTO 3D
+// 1. SHADER LED CON ONDA LÍQUIDA SUTIL (CIRCUNFERENCIA ESTRECHA Y ESTELA CORTA)
 // ============================================================================
 const ledWallVertexShader = /* glsl */ `
   uniform float uTime;
@@ -21,15 +21,13 @@ const ledWallVertexShader = /* glsl */ `
     vUv = uv;
     vec3 pos = position;
 
-    // Curvatura cóncava envolvente
     float nx = pos.x / 19.0;
     float ny = pos.y / 11.0;
     float r2 = nx * nx + ny * ny;
     pos.z += r2 * 6.8;
 
-    // Movimiento espacial 3D orgánico de los paneles LED sincronizado con el scroll y el mouse
-    pos.x += sin(uTime * 0.3 + pos.y * 0.15) * 0.12 + uMouse.x * 0.25;
-    pos.y += cos(uTime * 0.25 + pos.x * 0.15) * 0.10 + uMouse.y * 0.20;
+    pos.x += sin(uTime * 0.3 + pos.y * 0.15) * 0.08 + uMouse.x * 0.18;
+    pos.y += cos(uTime * 0.25 + pos.x * 0.15) * 0.06 + uMouse.y * 0.14;
 
     vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
     vWorldPos = worldPosition.xyz;
@@ -102,15 +100,16 @@ const ledWallFragmentShader = /* glsl */ `
     float activeRand   = mix(randCab, randSub, isSplit);
 
     // ========================================================================
-    // EFECTO LÍQUIDO "FLOR DE AGUA" (RIPPLE / FLOWMAP INTERACTIVO CON EL CURSOR)
+    // ONDA LÍQUIDA SUTIL ("FLOR DE AGUA") ALREDEDOR DEL CURSOR (ESTELA CORTA)
     // ========================================================================
     vec2 mouseUv = uMouse * 0.5 + 0.5;
     vec2 toMouse = vUv - mouseUv;
-    toMouse.x *= 1.77; // Corrección de aspecto
+    toMouse.x *= 1.77;
     float distToMouse = length(toMouse);
 
-    // Onda concéntrica expansiva tipo onda en el agua al mover el cursor
-    float ripple = sin(distToMouse * 35.0 - uTime * 6.0) * exp(-distToMouse * 4.5) * (0.018 + uMouseSpeed * 0.045);
+    // Circunferencia estrecha y estela de amortiguación rápida (cero efecto piscina)
+    float rippleMask = smoothstep(0.28, 0.02, distToMouse);
+    float ripple = sin(distToMouse * 45.0 - uTime * 7.0) * rippleMask * (0.006 + uMouseSpeed * 0.015);
     vec2 fluidUv = vUv + normalize(toMouse + 0.0001) * ripple;
 
     vec2 centered = (fluidUv - 0.5) * vec2(1.77, 1.0);
@@ -155,8 +154,9 @@ const ledWallFragmentShader = /* glsl */ `
     float watermark = moduleWatermarkG(activePanelUv);
     screenColor *= (1.0 + watermark * 0.14);
 
-    float mouseGlow = exp(-distToMouse * 6.0) * (0.35 + uMouseSpeed * 1.2);
-    screenColor += mix(vec3(0.08, 0.45, 0.38), uAccentColor * 1.4, uCarouselBlend) * mouseGlow;
+    // Resplandor localizado y sutil justo bajo el cursor
+    float mouseGlow = rippleMask * (0.22 + uMouseSpeed * 0.5);
+    screenColor += mix(vec3(0.05, 0.30, 0.22), uAccentColor * 0.9, uCarouselBlend) * mouseGlow;
 
     float ledPixelGroove = crispGroove(fluidUv, ledMatrixGrid, 0.72);
     screenColor *= (1.0 - ledPixelGroove * 0.52);
@@ -195,9 +195,6 @@ const ledWallFragmentShader = /* glsl */ `
   }
 `;
 
-// ============================================================================
-// 2. COMPONENTE DE LA BÓVEDA LED PROFUNDA CON MOVIMIENTO 3D VIVO
-// ============================================================================
 export function CurvedLEDWall({
   mouseRef,
   scrollRef,
@@ -291,7 +288,6 @@ export function CurvedLEDWall({
       0.08
     );
 
-    // Movimiento 3D físico inercial de la malla LED según el cursor o giroscopio
     meshRef.current.rotation.y = THREE.MathUtils.lerp(
       meshRef.current.rotation.y,
       mouseRef.current.x * 0.08,
@@ -349,7 +345,7 @@ export function CurvedLEDWall({
 }
 
 // ============================================================================
-// 3. PLANO TIPOGRÁFICO MONUMENTAL ("GuiporDI" -> "PROYECTOS")
+// 2. PLANO TIPOGRÁFICO MONUMENTAL CON RESPLANDOR "ENCENDIDO" (GLOW / BLUR MÍNIMO)
 // ============================================================================
 export function BrandTypographyPlane({
   mouseRef,
@@ -364,11 +360,14 @@ export function BrandTypographyPlane({
 }) {
   const heroMeshRef = useRef<THREE.Mesh>(null);
   const worksMeshRef = useRef<THREE.Mesh>(null);
+  const glowMeshRef = useRef<THREE.Mesh>(null); // Capa trasera de resplandor encendido
   const heroMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const worksMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const glowMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const { viewport } = useThree();
 
-  const { heroTexture, worksTexture } = useMemo(() => {
+  const { heroTexture, glowTexture, worksTexture } = useMemo(() => {
+    // 1. Textura Principal Nítida ("GuiporDI SOLUCIONES")
     const canvasHero = document.createElement("canvas");
     canvasHero.width = 4096;
     canvasHero.height = 1536;
@@ -400,6 +399,33 @@ export function BrandTypographyPlane({
     texHero.anisotropy = 16;
     texHero.needsUpdate = true;
 
+    // 2. Textura de Resplandor Encendido con Blur Mínimo y Tono Esmeralda Suave
+    const canvasGlow = document.createElement("canvas");
+    canvasGlow.width = 2048;
+    canvasGlow.height = 768;
+    const ctxG = canvasGlow.getContext("2d");
+
+    if (ctxG) {
+      ctxG.clearRect(0, 0, canvasGlow.width, canvasGlow.height);
+      ctxG.textAlign = "center";
+      ctxG.textBaseline = "middle";
+
+      // Aplicamos desenfoque (blur) nativo en canvas para generar el glow luminoso
+      ctxG.shadowColor = "rgba(52, 211, 153, 0.85)";
+      ctxG.shadowBlur = 45;
+      ctxG.fillStyle = "rgba(16, 185, 129, 0.65)";
+
+      ctxG.font =
+        "900 365px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctxG.letterSpacing = "-6px";
+      ctxG.fillText("GuiporDI", canvasGlow.width / 2, canvasGlow.height * 0.46);
+    }
+
+    const texGlow = new THREE.CanvasTexture(canvasGlow);
+    texGlow.anisotropy = 16;
+    texGlow.needsUpdate = true;
+
+    // 3. Textura de la sección Proyectos
     const canvasWorks = document.createElement("canvas");
     canvasWorks.width = 4096;
     canvasWorks.height = 1536;
@@ -424,7 +450,7 @@ export function BrandTypographyPlane({
     texWorks.anisotropy = 16;
     texWorks.needsUpdate = true;
 
-    return { heroTexture: texHero, worksTexture: texWorks };
+    return { heroTexture: texHero, glowTexture: texGlow, worksTexture: texWorks };
   }, []);
 
   useFrame(() => {
@@ -435,19 +461,21 @@ export function BrandTypographyPlane({
     const worksFade = 1.0 - THREE.MathUtils.smoothstep(s, 0.18, 0.34);
     const worksOpacity = worksEnter * Math.max(0.28, worksFade);
 
-    if (heroMeshRef.current && heroMatRef.current) {
+    if (heroMeshRef.current && heroMatRef.current && glowMeshRef.current && glowMatRef.current) {
       heroMatRef.current.opacity = heroOpacity;
+      glowMatRef.current.opacity = heroOpacity * 0.55; // Resplandor difuso trasero
       heroMeshRef.current.visible = heroOpacity > 0.01;
-      heroMeshRef.current.position.x = THREE.MathUtils.lerp(
-        heroMeshRef.current.position.x,
-        -mouseRef.current.x * 0.18,
-        0.06
-      );
-      heroMeshRef.current.position.y = THREE.MathUtils.lerp(
-        heroMeshRef.current.position.y,
-        0.04 - mouseRef.current.y * 0.12 + s * 2.2,
-        0.08
-      );
+      glowMeshRef.current.visible = heroOpacity > 0.01;
+
+      const targetX = -mouseRef.current.x * 0.18;
+      const targetY = 0.04 - mouseRef.current.y * 0.12 + s * 2.2;
+
+      heroMeshRef.current.position.x = THREE.MathUtils.lerp(heroMeshRef.current.position.x, targetX, 0.06);
+      heroMeshRef.current.position.y = THREE.MathUtils.lerp(heroMeshRef.current.position.y, targetY, 0.08);
+
+      // El resplandor se desplaza milimétricamente desfasado para dar profundidad óptica
+      glowMeshRef.current.position.x = THREE.MathUtils.lerp(glowMeshRef.current.position.x, targetX, 0.04);
+      glowMeshRef.current.position.y = THREE.MathUtils.lerp(glowMeshRef.current.position.y, targetY, 0.05);
     }
 
     if (worksMeshRef.current && worksMatRef.current) {
@@ -468,6 +496,20 @@ export function BrandTypographyPlane({
 
   return (
     <>
+      {/* Capa de Resplandor Encendido (Blur mínimo trasero) */}
+      <mesh ref={glowMeshRef} position={[0, 0.04, -3.28]}>
+        <planeGeometry args={[planeWidth * 1.02, planeHeight * 1.02]} />
+        <meshBasicMaterial
+          ref={glowMatRef}
+          map={glowTexture}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      {/* Capa Principal Nítida del Título */}
       <mesh ref={heroMeshRef} position={[0, 0.04, -3.2]}>
         <planeGeometry args={[planeWidth, planeHeight]} />
         <meshBasicMaterial
@@ -494,7 +536,7 @@ export function BrandTypographyPlane({
 }
 
 // ============================================================================
-// 4. MONOLITO ARQUITECTÓNICO "G" CON ROTACIÓN DE SCROLL Y GIROSCOPIO
+// 3. MONOLITO ARQUITECTÓNICO "G" CON GIROSCOPIO Y ROTACIÓN
 // ============================================================================
 export function ArchitecturalGlassMonolithG({
   mouseRef,
