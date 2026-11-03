@@ -27,6 +27,7 @@ export interface CustomQuoteConfig {
   apiRecharge: string;
   mediaPack: string;
   clientName: string;
+  clientContact: string;
 }
 
 interface ChatMessage {
@@ -81,6 +82,7 @@ export function AIConciergeQuoteModal({
     apiRecharge: "No requiero recarga API",
     mediaPack: "Sin activos para redes",
     clientName: "",
+    clientContact: "",
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -93,6 +95,7 @@ export function AIConciergeQuoteModal({
   const [inputPrompt, setInputPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [leadSaved, setLeadSaved] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -102,11 +105,11 @@ export function AIConciergeQuoteModal({
 
   if (!isOpen) return null;
 
-  // Genera el texto estructurado listo para copiar y enviar al WhatsApp oficial
   const buildFormattedSummary = () => {
     return [
       "⚡ *SOLICITUD DE COTIZACIÓN — GUIPORDI SOLUCIONES*",
       config.clientName ? `👤 *Cliente:* ${config.clientName}` : null,
+      config.clientContact ? `📱 *Contacto:* ${config.clientContact}` : null,
       config.businessNiche
         ? `🏢 *Rubro / Negocio:* ${config.businessNiche}`
         : null,
@@ -117,6 +120,29 @@ export function AIConciergeQuoteModal({
     ]
       .filter(Boolean)
       .join("\n");
+  };
+
+  // Guarda silenciosamente la cotización en Supabase para que aparezca en /admin
+  const saveLeadToDatabase = async (aiReplyText?: string) => {
+    try {
+      await fetch("/api/admin-erp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_public_lead",
+          payload: {
+            ...config,
+            aiRecommendation:
+              aiReplyText ||
+              messages[messages.length - 1]?.content ||
+              "Solicitud directa desde el configurador",
+          },
+        }),
+      });
+      setLeadSaved(true);
+    } catch {
+      // No interrumpe la experiencia del cliente si está offline
+    }
   };
 
   const handleSendMessage = async (customText?: string) => {
@@ -142,15 +168,22 @@ export function AIConciergeQuoteModal({
         }),
       });
       const data = await res.json();
+      const replyText =
+        data.reply ||
+        "He analizado tu solicitud. Puedes enviarla a nuestro WhatsApp directo para darte el presupuesto formal.";
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            data.reply ||
-            "He analizado tu solicitud. Puedes enviarla a nuestro WhatsApp directo para darte el presupuesto formal.",
+          content: replyText,
         },
       ]);
+
+      // Guardamos el lead en Supabase cuando consulta su propuesta con la IA
+      if (!leadSaved) {
+        saveLeadToDatabase(replyText);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -166,22 +199,23 @@ export function AIConciergeQuoteModal({
   };
 
   const handleAnalyzeSelectionWithAI = () => {
-    const prompt = `Evalúa mi selección actual y dime qué incluye exactamente y cómo me ayudará: Entorno (${config.environmentType}), Rubro (${
-      config.businessNiche || "General"
-    }), IA (${config.aiModule}), Recarga API (${
-      config.apiRecharge
-    }), Redes (${config.mediaPack}).`;
+    const prompt = `Evalúa mi selección actual y dime qué incluye exactamente y cómo me ayudará: Entorno (${
+      config.environmentType
+    }), Rubro (${config.businessNiche || "General"}), IA (${
+      config.aiModule
+    }), Recarga API (${config.apiRecharge}), Redes (${config.mediaPack}).`;
     handleSendMessage(prompt);
   };
 
   const handleGoToWhatsApp = async () => {
     const summary = buildFormattedSummary();
+    saveLeadToDatabase();
     try {
       await navigator.clipboard.writeText(summary);
       setCopiedSummary(true);
       setTimeout(() => setCopiedSummary(false), 3500);
     } catch {
-      // Continúa si el navegador móvil restringe clipboard automático
+      // Continúa si el navegador móvil restringe el portapapeles
     }
     window.open(WHATSAPP_OFFICIAL_LINK, "_blank", "noopener,noreferrer");
   };
@@ -220,7 +254,7 @@ export function AIConciergeQuoteModal({
           </button>
         </div>
 
-        {/* CONMUTADOR DE PESTAÑAS EN MÓVIL (PARA QUE EN CELULAR SE VEA LIMPIO Y ORDENADO) */}
+        {/* PESTAÑAS MÓVILES */}
         <div className="grid grid-cols-2 lg:hidden border-b border-white/15 bg-black/40 font-mono text-xs shrink-0">
           <button
             onClick={() => setActiveMobileTab("builder")}
@@ -246,19 +280,18 @@ export function AIConciergeQuoteModal({
           </button>
         </div>
 
-        {/* CUERPO PRINCIPAL DIVIDIDO EN 2 COLUMNAS (PC) O PESTAÑAS (MÓVIL) */}
+        {/* CUERPO PRINCIPAL */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-          {/* COLUMNA IZQUIERDA: CONFIGURADOR INTERACTIVO DE MÓDULOS */}
+          {/* COLUMNA IZQUIERDA: CONFIGURADOR */}
           <div
             className={`lg:col-span-7 overflow-y-auto p-4 sm:p-6 space-y-5 border-r border-white/10 ${
               activeMobileTab === "builder" ? "block" : "hidden lg:block"
             }`}
           >
-            {/* Datos rápidos del negocio */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-mono text-[10px] uppercase tracking-wider text-emerald-400 mb-1">
-                  Tu Nombre o Empresa (Opcional)
+                  Tu Nombre o Empresa
                 </label>
                 <input
                   type="text"
@@ -272,7 +305,21 @@ export function AIConciergeQuoteModal({
               </div>
               <div>
                 <label className="block font-mono text-[10px] uppercase tracking-wider text-emerald-400 mb-1">
-                  Rubro o Tipo de Negocio
+                  Tu WhatsApp o Correo
+                </label>
+                <input
+                  type="text"
+                  value={config.clientContact}
+                  onChange={(e) =>
+                    setConfig({ ...config, clientContact: e.target.value })
+                  }
+                  placeholder="Ej. +58 414... / correo"
+                  className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/15 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-[10px] uppercase tracking-wider text-emerald-400 mb-1">
+                  Rubro del Negocio
                 </label>
                 <input
                   type="text"
@@ -280,13 +327,13 @@ export function AIConciergeQuoteModal({
                   onChange={(e) =>
                     setConfig({ ...config, businessNiche: e.target.value })
                   }
-                  placeholder="Ej. Zapatería, Ferretería, Agencia, SaaS..."
+                  placeholder="Ej. Zapatería, Ferretería..."
                   className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/15 text-xs text-white placeholder:text-white/35 focus:outline-none focus:border-emerald-400"
                 />
               </div>
             </div>
 
-            {/* BLOQUE 1: ENTORNOS DE VENTAS DIGITALES & E-COMMERCE */}
+            {/* BLOQUE 1 */}
             <div className="space-y-2">
               <div className="flex items-center gap-2 font-mono text-xs text-emerald-400 uppercase tracking-wider">
                 <ShoppingBag className="w-3.5 h-3.5" />
@@ -318,7 +365,7 @@ export function AIConciergeQuoteModal({
               </div>
             </div>
 
-            {/* BLOQUE 2: AGENTES DE INTELIGENCIA ARTIFICIAL (JARVIS / SOFÍA) */}
+            {/* BLOQUE 2 */}
             <div className="space-y-2">
               <div className="flex items-center gap-2 font-mono text-xs text-emerald-400 uppercase tracking-wider">
                 <Bot className="w-3.5 h-3.5" />
@@ -348,7 +395,7 @@ export function AIConciergeQuoteModal({
               </div>
             </div>
 
-            {/* BLOQUE 3: RECARGA DE SALDO DE PROVEEDORES IA (ANTHROPIC / OPENAI) */}
+            {/* BLOQUE 3 */}
             <div className="space-y-2">
               <div className="flex items-center gap-2 font-mono text-xs text-emerald-400 uppercase tracking-wider">
                 <Zap className="w-3.5 h-3.5" />
@@ -378,7 +425,7 @@ export function AIConciergeQuoteModal({
               </div>
             </div>
 
-            {/* BLOQUE 4: ACTIVOS VISUALES PARA REDES SOCIALES (VIDEO & IMAGEN) */}
+            {/* BLOQUE 4 */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 font-mono text-xs text-emerald-400 uppercase tracking-wider">
@@ -413,7 +460,6 @@ export function AIConciergeQuoteModal({
               </div>
             </div>
 
-            {/* Botón para pedirle a la IA que evalúe el paquete armado */}
             <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
               <button
                 type="button"
@@ -429,19 +475,18 @@ export function AIConciergeQuoteModal({
                 onClick={handleGoToWhatsApp}
                 className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white text-black hover:bg-emerald-400 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <span>Cotizar este Paquete en WhatsApp</span>
+                <span>Guardar y Cotizar en WhatsApp</span>
                 <ArrowUpRight className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: GLOBO DE CONVERSACIÓN CON EL ARQUITECTO IA */}
+          {/* COLUMNA DERECHA: CHAT IA */}
           <div
             className={`lg:col-span-5 flex flex-col h-full overflow-hidden bg-black/40 ${
               activeMobileTab === "chat" ? "flex" : "hidden lg:flex"
             }`}
           >
-            {/* Mensajes del Chat */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 font-sans text-xs sm:text-sm">
               {messages.map((msg, idx) => (
                 <div
@@ -473,7 +518,6 @@ export function AIConciergeQuoteModal({
               <div ref={chatEndRef} />
             </div>
 
-            {/* Caja de entrada de preguntas a la IA */}
             <div className="p-3 border-t border-white/10 bg-black/60 space-y-2.5">
               <form
                 onSubmit={(e) => {
@@ -499,7 +543,6 @@ export function AIConciergeQuoteModal({
                 </button>
               </form>
 
-              {/* Botón Directo al WhatsApp Oficial + Copiado Automático del Resumen */}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -512,8 +555,10 @@ export function AIConciergeQuoteModal({
 
                 <button
                   type="button"
-                  onClick={ async () => {
-                    await navigator.clipboard.writeText(buildFormattedSummary());
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(
+                      buildFormattedSummary()
+                    );
                     setCopiedSummary(true);
                     setTimeout(() => setCopiedSummary(false), 2500);
                   }}
