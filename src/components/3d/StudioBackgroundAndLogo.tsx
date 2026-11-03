@@ -412,7 +412,7 @@ export function BrandTypographyPlane({
 
       // Aplicamos desenfoque (blur) nativo en canvas para generar el glow luminoso
       ctxG.shadowColor = "rgba(52, 211, 153, 0.85)";
-      ctxG.shadowBlur = 95;
+      ctxG.shadowBlur = 155;
       ctxG.fillStyle = "rgba(16, 185, 129, 0.65)";
 
       ctxG.font =
