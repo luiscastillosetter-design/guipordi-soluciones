@@ -1,34 +1,39 @@
 "use client";
 
 import React from "react";
-import { ArrowUpRight, Sparkles, Cpu, Globe, Database } from "lucide-react";
+import {
+  ArrowUpRight,
+  Sparkles,
+  Cpu,
+  Globe,
+  Database,
+  MessageSquare,
+} from "lucide-react";
+import { WHATSAPP_OFFICIAL_LINK } from "@/components/ui/AIConciergeQuoteModal";
 
 interface VisionServicesFooterProps {
-  scrollProgress: number; // Rango extendido: 0.0 a 2.25
+  scrollProgress: number;
   onNavigateScroll: (target: number) => void;
   onOpenCatalog: () => void;
+  onOpenQuoteModal: () => void;
 }
 
 export function VisionServicesFooter({
   scrollProgress,
   onNavigateScroll,
   onOpenCatalog,
+  onOpenQuoteModal,
 }: VisionServicesFooterProps) {
-  // ==========================================================================
-  // CÁLCULO MATEMÁTICO DE TRANSICIONES SEGÚN EL AVANCE DEL SCROLL (1.0 -> 2.25)
-  // ==========================================================================
   // 1. Sección VISIÓN (Blanca): Entra en 1.02, plena entre 1.12 y 1.38, sale en 1.48
   const visionEnter = Math.min(Math.max((scrollProgress - 1.0) / 0.12, 0), 1);
   const visionExit = Math.min(Math.max((scrollProgress - 1.38) / 0.1, 0), 1);
   const visionVisibility = visionEnter * (1 - visionExit);
 
-  // Progreso interno dentro de VISIÓN (0 a 1) para mover el prisma holográfico
   const visionInternal = Math.min(
     Math.max((scrollProgress - 1.02) / 0.42, 0),
     1
   );
 
-  // Destello de zoom holográfico al final de VISIÓN (como en el segundo 00:56 del video)
   const prismBurst =
     scrollProgress > 1.32 && scrollProgress < 1.48
       ? Math.sin(((scrollProgress - 1.32) / 0.16) * Math.PI)
@@ -49,7 +54,7 @@ export function VisionServicesFooter({
     1
   );
 
-  // 3. Sección FOOTER ARQUITECTÓNICO (1.88 -> 2.25)
+  // 3. Sección FOOTER ARQUITECTÓNICO (1.88 -> 2.15)
   const footerVisibility = Math.min(
     Math.max((scrollProgress - 1.86) / 0.12, 0),
     1
@@ -60,7 +65,7 @@ export function VisionServicesFooter({
   return (
     <div className="fixed inset-0 z-20 pointer-events-none overflow-hidden">
       {/* =====================================================================
-          FASE A: SECCIÓN "VISIÓN" (ESTÉTICA BLANCA ARQUITECTÓNICA + HOLOGRAMA)
+          FASE A: SECCIÓN "VISIÓN" (CON ESPACIADO MÓVIL DESPEJADO)
       ===================================================================== */}
       {visionVisibility > 0.005 && (
         <section
@@ -70,7 +75,7 @@ export function VisionServicesFooter({
             transform: `translateY(${(1 - visionEnter) * 18}%)`,
           }}
         >
-          {/* Cuadrícula técnica clara con cruces '+' (Estilo Alche 00:51) */}
+          {/* Cuadrícula técnica clara con cruces '+' */}
           <div
             className="absolute inset-0 opacity-70"
             style={{
@@ -82,7 +87,6 @@ export function VisionServicesFooter({
             }}
           />
 
-          {/* Cruces '+' técnicas distribuidas en el plano blanco */}
           <div className="absolute inset-0 grid grid-cols-4 md:grid-cols-6 grid-rows-4 pointer-events-none">
             {Array.from({ length: 24 }).map((_, i) => (
               <div
@@ -96,7 +100,7 @@ export function VisionServicesFooter({
 
           {/* Monolito "G" Técnico en Wireframe + Barra Diagonal Holográfica Iridescente */}
           <div
-            className="relative w-[310px] sm:w-[440px] md:w-[540px] aspect-square flex items-center justify-center transition-transform duration-150"
+            className="relative w-[260px] sm:w-[420px] md:w-[540px] aspect-square flex items-center justify-center transition-transform duration-150"
             style={{
               transform: `scale(${1 + prismBurst * 1.45}) rotate(${
                 (visionInternal - 0.5) * -8
@@ -108,7 +112,6 @@ export function VisionServicesFooter({
               className="w-full h-full drop-shadow-sm overflow-visible"
             >
               <defs>
-                {/* Gradiente Holográfico Arcoíris estilo Alche 00:54 */}
                 <linearGradient
                   id="alcheHoloGrad"
                   x1="0%"
@@ -126,7 +129,6 @@ export function VisionServicesFooter({
                   <stop offset="100%" stopColor="#ffe600" stopOpacity="0.9" />
                 </linearGradient>
 
-                {/* Filtro de grano mineral para la barra iridiscente */}
                 <filter id="holoGrain">
                   <feTurbulence
                     type="fractalNoise"
@@ -143,7 +145,6 @@ export function VisionServicesFooter({
                 </filter>
               </defs>
 
-              {/* Líneas de compás de construcción detrás de la G */}
               <circle
                 cx="200"
                 cy="200"
@@ -170,7 +171,6 @@ export function VisionServicesFooter({
                 strokeWidth="1"
               />
 
-              {/* Sombra arquitectónica 3D del monolito G */}
               <polygon
                 points="325,95 275,35 125,35 65,105 65,295 125,365 280,365 335,300 335,190 205,190 185,235 275,235 275,285 240,315 155,315 120,275 120,125 155,85 240,85 280,125"
                 fill="rgba(255,255,255,0.65)"
@@ -179,7 +179,6 @@ export function VisionServicesFooter({
                 transform="translate(12, 10)"
               />
 
-              {/* Contorno principal del monolito G en blanco técnico */}
               <polygon
                 points="325,95 275,35 125,35 65,105 65,295 125,365 280,365 335,300 335,190 205,190 185,235 275,235 275,285 240,315 155,315 120,275 120,125 155,85 240,85 280,125"
                 fill="rgba(255,255,255,0.88)"
@@ -187,7 +186,6 @@ export function VisionServicesFooter({
                 strokeWidth="2.5"
               />
 
-              {/* Barra Diagonal Holográfica Iridescente que recorre el pilar de la G */}
               <polygon
                 points="195,35 125,35 65,105 65,295 120,360 165,315 120,275 120,125 155,85"
                 fill="url(#alcheHoloGrad)"
@@ -199,12 +197,11 @@ export function VisionServicesFooter({
             </svg>
           </div>
 
-          {/* Contenedor Panorámico de Textos "VISIÓN" (Dual PC y Móvil) */}
-          <div className="absolute inset-0 max-w-[1680px] mx-auto px-6 md:px-12 lg:px-16 flex flex-col justify-between py-24 md:py-0 md:justify-center">
-            {/* Título Gigante Contorneado "VISIÓN" */}
-            <div className="md:mb-8">
+          {/* Contenedor Panorámico de Textos "VISIÓN" (Optimizado en Móvil y PC) */}
+          <div className="absolute inset-0 max-w-[1680px] mx-auto px-5 md:px-12 lg:px-16 pt-20 pb-20 md:py-0 flex flex-col justify-center gap-4 md:gap-8">
+            <div>
               <span
-                className="text-5xl sm:text-7xl md:text-8xl font-black tracking-widest uppercase select-none"
+                className="text-4xl sm:text-6xl md:text-8xl font-black tracking-widest uppercase select-none"
                 style={{
                   WebkitTextStroke: "1.5px rgba(15, 20, 25, 0.35)",
                   color: "transparent",
@@ -214,49 +211,44 @@ export function VisionServicesFooter({
               </span>
             </div>
 
-            {/* Bloques Izquierdo y Derecho con Cintas Negras (Idéntico a Alche 00:53) */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-              {/* Bloque Izquierdo */}
-              <div className="md:col-span-5 space-y-3">
-                <div className="flex flex-col items-start gap-1.5">
-                  <span className="bg-[#0b0d10] text-white text-lg sm:text-2xl md:text-3xl font-extrabold px-3 py-1 tracking-tight shadow-md">
-                    Ingeniería digital inédita
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-center">
+              <div className="md:col-span-5 space-y-2">
+                <div className="flex flex-col items-start gap-1">
+                  <span className="bg-[#0b0d10] text-white text-base sm:text-2xl md:text-3xl font-extrabold px-2.5 py-1 tracking-tight shadow-md">
+                    Entornos de ventas digitales
                   </span>
-                  <span className="bg-[#0b0d10] text-white text-lg sm:text-2xl md:text-3xl font-extrabold px-3 py-1 tracking-tight shadow-md">
+                  <span className="bg-[#0b0d10] text-white text-base sm:text-2xl md:text-3xl font-extrabold px-2.5 py-1 tracking-tight shadow-md">
                     y experiencias inmersivas que
                   </span>
-                  <span className="bg-[#0b0d10] text-white text-lg sm:text-2xl md:text-3xl font-extrabold px-3 py-1 tracking-tight shadow-md">
-                    multiplican tus ventas
+                  <span className="bg-[#0b0d10] text-white text-base sm:text-2xl md:text-3xl font-extrabold px-2.5 py-1 tracking-tight shadow-md">
+                    multiplican tu facturación
                   </span>
                 </div>
-                <p className="font-mono text-xs text-black/60 max-w-sm pt-1">
-                  Arquitectura de software a medida, e-commerce de alta
-                  velocidad y entornos WebGL sin precedentes.
+                <p className="font-mono text-[11px] sm:text-xs text-black/65 max-w-sm pt-0.5 leading-relaxed">
+                  Ingeniería de software a medida, e-commerce multi-rubro y
+                  ecosistemas de IA sin precedentes.
                 </p>
               </div>
 
-              {/* Espacio Central para la G */}
               <div className="hidden md:block md:col-span-2" />
 
-              {/* Bloque Derecho */}
-              <div className="md:col-span-5 flex flex-col md:items-end text-left md:text-right space-y-3">
-                <div className="flex flex-col items-start md:items-end gap-1.5">
-                  <span className="bg-[#0b0d10] text-white text-lg sm:text-2xl md:text-3xl font-extrabold px-3 py-1 tracking-tight shadow-md">
-                    Creamos ecosistemas que
+              <div className="md:col-span-5 flex flex-col md:items-end text-left md:text-right space-y-2">
+                <div className="flex flex-col items-start md:items-end gap-1">
+                  <span className="bg-[#0b0d10] text-white text-base sm:text-2xl md:text-3xl font-extrabold px-2.5 py-1 tracking-tight shadow-md">
+                    Creamos tecnología que
                   </span>
-                  <span className="bg-[#0b0d10] text-white text-lg sm:text-2xl md:text-3xl font-extrabold px-3 py-1 tracking-tight shadow-md">
-                    impulsan marcas reales
+                  <span className="bg-[#0b0d10] text-white text-base sm:text-2xl md:text-3xl font-extrabold px-2.5 py-1 tracking-tight shadow-md">
+                    impulsa marcas reales
                   </span>
                 </div>
-                <p className="font-mono text-xs text-black/60 max-w-sm pt-1">
-                  Desde sincronización industrial con bases de datos locales
-                  hasta agentes autónomos de inteligencia artificial.
+                <p className="font-mono text-[11px] sm:text-xs text-black/65 max-w-sm pt-0.5 leading-relaxed">
+                  Desde sincronización con inventarios locales hasta agentes
+                  autónomos como Jarvis y Sofía.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Capa de Explosión Iridescente de Transición (Segundo 00:56 del video) */}
           {prismBurst > 0.05 && (
             <div
               className="absolute inset-0 pointer-events-none mix-blend-multiply"
@@ -271,23 +263,21 @@ export function VisionServicesFooter({
       )}
 
       {/* =====================================================================
-          FASE B: SECCIÓN "SERVICIOS & ECOSISTEMA IA" (ESTILO ALCHE 00:58 - 01:03)
+          FASE B: SECCIÓN "SERVICIOS & ECOSISTEMA IA" (SIN ROCE CON HEADER MÓVIL)
       ===================================================================== */}
       {servicesVisibility > 0.005 && (
         <section
-          className="absolute inset-0 flex items-center justify-center px-5 md:px-12 lg:px-16"
+          className="absolute inset-0 flex items-center justify-center px-4 sm:px-6 md:px-12 lg:px-16 pt-16 pb-16 md:py-0"
           style={{
             opacity: servicesVisibility,
           }}
         >
           <div className="w-full max-w-[1640px] mx-auto">
-            {/* SUB-ETAPA 1 y 2: PANTALLA CURVA 3D A LA IZQUIERDA + ESPECIFICACIÓN A LA DERECHA */}
             {servicesInternal < 0.68 ? (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-                {/* Visor con Perspectiva 3D Inclinada (Como los monitores curvos de Alche en 00:59) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-12 items-center">
                 <div className="lg:col-span-7 perspective-[1400px]">
                   <div
-                    className="relative rounded-lg overflow-hidden border border-white/25 bg-black/70 shadow-2xl transition-all duration-500"
+                    className="relative rounded-lg overflow-hidden border border-white/25 bg-black/70 shadow-2xl transition-all duration-500 max-h-[30vh] sm:max-h-none"
                     style={{
                       transform:
                         "rotateY(14deg) rotateX(2deg) translateZ(0px)",
@@ -304,30 +294,31 @@ export function VisionServicesFooter({
                       className="w-full aspect-video object-cover object-top"
                     />
                     <div className="absolute inset-0 bg-gradient-to-tr from-black/65 via-transparent to-emerald-500/10" />
-                    <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between font-mono text-xs text-white/90 bg-black/60 backdrop-blur-md px-4 py-2 border border-white/15">
-                      <span>
+                    <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 flex items-center justify-between font-mono text-[10px] sm:text-xs text-white/90 bg-black/65 backdrop-blur-md px-3 py-1.5 border border-white/15">
+                      <span className="truncate pr-2">
                         {servicesInternal < 0.34
-                          ? "01 / INFRAESTRUCTURA E-COMMERCE & ERP SYNC"
-                          : "02 / SUPER-APPS, SAAS MULTI-SEDE & MOVILIDAD"}
+                          ? "01 / ENTORNOS DE VENTAS & E-COMMERCE"
+                          : "02 / SUPER-APPS, SAAS & MOVILIDAD"}
                       </span>
-                      <span className="text-emerald-400">EN PRODUCCIÓN ●</span>
+                      <span className="text-emerald-400 shrink-0">
+                        ACTIVO ●
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Columna Derecha de Explicación Técnica (Estilo "Fortnite Creative Works" / "Unreal Engine Works") */}
-                <div className="lg:col-span-5 space-y-5 bg-black/55 backdrop-blur-md p-6 md:p-8 border border-white/10">
-                  <div className="flex items-center justify-between font-mono text-xs text-emerald-400">
+                <div className="lg:col-span-5 space-y-3 sm:space-y-5 bg-black/65 backdrop-blur-md p-4 sm:p-6 md:p-8 border border-white/15 rounded-xl lg:rounded-none">
+                  <div className="flex items-center justify-between font-mono text-[10px] sm:text-xs text-emerald-400">
                     <span className="flex items-center gap-2">
                       {servicesInternal < 0.34 ? (
-                        <Database className="w-4 h-4" />
+                        <Database className="w-3.5 h-3.5" />
                       ) : (
-                        <Globe className="w-4 h-4" />
+                        <Globe className="w-3.5 h-3.5" />
                       )}
                       <span>
                         {servicesInternal < 0.34
-                          ? "ARQUITECTURA COMERCIAL CLOUD"
-                          : "PLATAFORMAS INTERACTIVAS DE GRAN ESCALA"}
+                          ? "ENTORNOS DE VENTAS DIGITALES"
+                          : "APLICACIONES & PLATAFORMAS SAAS"}
                       </span>
                     </span>
                     <span className="px-2 py-0.5 border border-emerald-400/40 bg-emerald-400/10">
@@ -335,65 +326,81 @@ export function VisionServicesFooter({
                     </span>
                   </div>
 
-                  <h2 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-white leading-none">
+                  <h2 className="text-xl sm:text-3xl md:text-5xl font-black tracking-tight text-white leading-tight">
                     {servicesInternal < 0.34
-                      ? "E-Commerce & Sincronización ERP"
-                      : "Sistemas SaaS & Aplicaciones Móviles"}
+                      ? "E-Commerce Multi-Rubro & Embudos AIDA"
+                      : "Sistemas SaaS, Apps & Automatización"}
                   </h2>
 
-                  <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+                  <p className="text-xs sm:text-base text-white/85 leading-relaxed">
                     {servicesInternal < 0.34
-                      ? "Desarrollamos tiendas virtuales de velocidad extrema en Next.js conectadas en tiempo real con tu inventario físico (Firebird SQL, PostgreSQL, Redis), con paneles administrativos autogestionables y embudos de alta conversión."
-                      : "Construimos aplicaciones de movilidad, sistemas de gestión deportiva y plataformas de boletería masiva con conciliación bancaria automática Zero-Fee, mapas interactivos en vivo y experiencia táctil nativa."}
+                      ? "Creamos tiendas virtuales y entornos de ventas digitales para cualquier negocio (zapaterías, ferreterías, importadoras, repuestos), además de paquetes de videos e imágenes de alta conversión para redes sociales."
+                      : "Construimos aplicaciones móviles, sistemas administrativos, plataformas de boletería QR y flujos operativos a medida con velocidad extrema en dispositivos móviles y escritorio."}
                   </p>
 
-                  <p className="font-mono text-xs text-white/50 leading-relaxed border-t border-white/15 pt-4">
-                    {servicesInternal < 0.34
-                      ? "Casos reales desplegados: Importadora TodoMax, Energy KVA (3.375 equipos sincronizados), Materiales y Metales Acarigua y BK Electronics."
-                      : "Casos reales desplegados: Rapitravel (Urbano, Mascotas y Fletes), Apex Hub Gym, Iglesia Iviluz y G12 Tickets SaaS."}
-                  </p>
+                  <div className="pt-1 pointer-events-auto">
+                    <button
+                      onClick={onOpenQuoteModal}
+                      className="px-4 py-2 rounded-full border border-emerald-400/50 bg-emerald-400/15 hover:bg-emerald-400 hover:text-black font-mono text-[11px] text-emerald-300 font-bold inline-flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Armar y Cotizar mi Entorno con IA →</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
-              /* SUB-ETAPA 3: SHOWCASE "GuiporDI IA ✦ (↗)" (IDÉNTICO A "stellla ✦ (↗)" EN 01:03 PC Y 01:53 MÓVIL) */
-              <div className="relative rounded-2xl overflow-hidden border border-white/20 bg-black/75 backdrop-blur-xl p-6 sm:p-12 lg:p-16 shadow-2xl">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  <div className="lg:col-span-7 space-y-6">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 font-mono text-xs text-emerald-300">
-                      <Cpu className="w-3.5 h-3.5" />
-                      <span>LABORATORIO DE INTELIGENCIA ARTIFICIAL & WEBGL</span>
+              /* SUB-ETAPA 3: SHOWCASE "GuiporDI IA ✦ (↗)" + RECARGAS API */
+              <div className="relative rounded-2xl overflow-hidden border border-white/20 bg-black/80 backdrop-blur-xl p-5 sm:p-10 lg:p-14 shadow-2xl">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
+                  <div className="lg:col-span-7 space-y-4 sm:space-y-6">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 font-mono text-[10px] sm:text-xs text-emerald-300">
+                      <Cpu className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        AGENTES IA (JARVIS / SOFÍA) & RECARGAS API
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <h2 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-white">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <h2 className="text-3xl sm:text-5xl md:text-7xl font-black tracking-tight text-white">
                         GuiporDI IA
                       </h2>
-                      <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 text-emerald-400 animate-pulse" />
-                      <span className="text-2xl sm:text-4xl font-mono text-white/70">
+                      <Sparkles className="w-7 h-7 sm:w-11 sm:h-11 text-emerald-400 animate-pulse shrink-0" />
+                      <span className="text-xl sm:text-4xl font-mono text-white/70">
                         (↗)
                       </span>
                     </div>
 
-                    <p className="text-base sm:text-lg text-white/85 leading-relaxed max-w-2xl">
-                      Plataforma propia de agentes autónomos de voz y texto
-                      (Jarvis IA & Sofía Bot) integrada con bases de datos
-                      serverless en Neon DB, Supabase y experiencias 3D
-                      interactivas para automatizar ventas, atención y
-                      operaciones 24/7.
+                    <p className="text-xs sm:text-base md:text-lg text-white/85 leading-relaxed max-w-2xl">
+                      Implementamos asistentes ejecutivos multimodales (Jarvis
+                      IA), bots cerradores de ventas para WhatsApp (Sofía) y
+                      servicio directo de{" "}
+                      <strong className="text-emerald-300">
+                        recarga de saldo API para Anthropic (Claude) y OpenAI
+                      </strong>
+                      .
                     </p>
 
-                    <div className="pt-2 pointer-events-auto">
+                    <div className="pt-1 flex flex-wrap items-center gap-3 pointer-events-auto">
+                      <button
+                        onClick={onOpenQuoteModal}
+                        className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-emerald-400 text-black font-mono text-xs uppercase tracking-wider font-extrabold hover:bg-emerald-300 transition-colors inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Cotizar Agente IA / Recarga Saldo</span>
+                      </button>
+
                       <button
                         onClick={onOpenCatalog}
-                        className="px-6 py-3 rounded-full bg-white text-black font-mono text-xs uppercase tracking-widest font-bold hover:bg-emerald-400 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                        className="px-4 py-2.5 sm:px-5 sm:py-3 rounded-full border border-white/25 bg-white/5 text-white font-mono text-xs uppercase tracking-wider hover:bg-white hover:text-black transition-colors inline-flex items-center gap-2 cursor-pointer"
                       >
-                        <span>Explorar los 9 Proyectos</span>
+                        <span>Ver los 9 Proyectos</span>
                         <ArrowUpRight className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="lg:col-span-5">
+                  <div className="lg:col-span-5 hidden sm:block">
                     <div className="relative rounded-xl overflow-hidden border border-white/20 shadow-2xl">
                       <img
                         src="/projects/jarvis-ordenador.png"
@@ -410,16 +417,15 @@ export function VisionServicesFooter({
       )}
 
       {/* =====================================================================
-          FASE C: FOOTER ARQUITECTÓNICO CON COMPÁS (ESTILO ALCHE 01:05 - 01:07)
+          FASE C: FOOTER ARQUITECTÓNICO CON WHATSAPP OFICIAL Y COTIZADOR IA
       ===================================================================== */}
       {footerVisibility > 0.005 && (
         <section
-          className="absolute inset-0 bg-[#020406]/95 backdrop-blur-xl flex flex-col justify-between pt-24 pb-14 px-6 md:px-12 lg:px-16 pointer-events-auto"
+          className="absolute inset-0 bg-[#020406]/95 backdrop-blur-xl flex flex-col justify-between pt-20 pb-14 px-5 md:px-12 lg:px-16 pointer-events-auto"
           style={{
             opacity: footerVisibility,
           }}
         >
-          {/* Trazado de Compás Arquitectónico de Fondo (Círculo Punteado + Líneas Diagonales) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-35">
             <svg viewBox="0 0 1600 900" className="w-full h-full">
               <line
@@ -466,12 +472,10 @@ export function VisionServicesFooter({
             </svg>
           </div>
 
-          {/* Parte Superior del Footer: Isotipo "G" Sólido + Columnas de Enlaces */}
-          <div className="relative z-10 max-w-[1680px] w-full mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 items-center my-auto">
-            {/* Emblema Geométrico Blanco a la Izquierda (Como el triángulo blanco de Alche en 01:05) */}
-            <div className="md:col-span-5 flex items-center gap-6">
-              <div className="w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center border border-white/20 bg-white/[0.03] relative">
-                <span className="text-6xl sm:text-7xl font-black tracking-tighter text-white">
+          <div className="relative z-10 max-w-[1680px] w-full mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-center my-auto">
+            <div className="md:col-span-5 flex items-center gap-5">
+              <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center border border-white/20 bg-white/[0.03] relative shrink-0">
+                <span className="text-5xl sm:text-7xl font-black tracking-tighter text-white">
                   G
                 </span>
                 <span className="absolute -top-1.5 -left-1.5 text-xs text-white/40">
@@ -487,20 +491,37 @@ export function VisionServicesFooter({
                   +
                 </span>
               </div>
-              <div className="font-mono space-y-1">
+              <div className="font-mono space-y-2">
                 <p className="text-xs tracking-[0.3em] text-emerald-400 uppercase">
                   GUIPORDI SOLUCIONES
                 </p>
-                <p className="text-sm text-white/80 max-w-xs">
-                  Ingeniería de software, diseño interactivo WebGL y sistemas
-                  empresariales.
+                <p className="text-xs sm:text-sm text-white/80 max-w-xs">
+                  Entornos de ventas digitales, e-commerce multi-rubro, agentes
+                  IA y recargas API.
                 </p>
+                <div className="pt-1 flex flex-wrap gap-2">
+                  <button
+                    onClick={onOpenQuoteModal}
+                    className="px-3.5 py-1.5 rounded-full bg-emerald-400 text-black font-mono text-[11px] font-bold hover:bg-emerald-300 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Cotizador IA</span>
+                  </button>
+                  <a
+                    href={WHATSAPP_OFFICIAL_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-1.5 rounded-full border border-white/25 bg-white/5 hover:bg-white hover:text-black font-mono text-[11px] inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare className="w-3 h-3 text-emerald-400" />
+                    <span>WhatsApp Directo</span>
+                  </a>
+                </div>
               </div>
             </div>
 
-            {/* Matriz de Navegación del Footer */}
             <div className="md:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-6 font-mono text-xs">
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <p className="text-white/40 uppercase tracking-widest">
                   Navegación
                 </p>
@@ -532,11 +553,27 @@ export function VisionServicesFooter({
                 </ul>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <p className="text-white/40 uppercase tracking-widest">
-                  Ecosistema
+                  Soluciones IA
                 </p>
                 <ul className="space-y-2 text-white/85">
+                  <li>
+                    <button
+                      onClick={onOpenQuoteModal}
+                      className="text-emerald-400 font-bold hover:underline cursor-pointer"
+                    >
+                      Armar Paquete a Medida
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={onOpenQuoteModal}
+                      className="hover:text-emerald-400 cursor-pointer"
+                    >
+                      Recargas Saldo Claude API
+                    </button>
+                  </li>
                   <li>
                     <button
                       onClick={onOpenCatalog}
@@ -545,30 +582,23 @@ export function VisionServicesFooter({
                       Catálogo Completo
                     </button>
                   </li>
-                  <li>
-                    <button
-                      onClick={() => onNavigateScroll(1.52)}
-                      className="hover:text-emerald-400 cursor-pointer"
-                    >
-                      E-Commerce & ERP
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => onNavigateScroll(1.78)}
-                      className="hover:text-emerald-400 cursor-pointer"
-                    >
-                      GuiporDI IA ✦
-                    </button>
-                  </li>
                 </ul>
               </div>
 
-              <div className="space-y-3 col-span-2 sm:col-span-1">
+              <div className="space-y-2.5 col-span-2 sm:col-span-1">
                 <p className="text-white/40 uppercase tracking-widest">
                   Contacto Directo
                 </p>
                 <div className="flex flex-col gap-2">
+                  <a
+                    href={WHATSAPP_OFFICIAL_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-emerald-400 font-bold hover:text-emerald-300"
+                  >
+                    <span>WhatsApp Oficial</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </a>
                   <a
                     href="https://guipordy.com"
                     target="_blank"
@@ -592,12 +622,11 @@ export function VisionServicesFooter({
             </div>
           </div>
 
-          {/* Tipografía Gigante de Cierre "GuiporDI" a todo el ancho (Estilo ALCHE 01:07) */}
-          <div className="relative z-10 max-w-[1680px] w-full mx-auto border-t border-white/15 pt-4 flex flex-col sm:flex-row items-baseline justify-between gap-4">
-            <h2 className="text-[15vw] sm:text-[11vw] font-black tracking-tighter leading-none text-white select-none">
+          <div className="relative z-10 max-w-[1680px] w-full mx-auto border-t border-white/15 pt-3 flex flex-col sm:flex-row items-baseline justify-between gap-2">
+            <h2 className="text-[14vw] sm:text-[11vw] font-black tracking-tighter leading-none text-white select-none">
               GuiporDI
             </h2>
-            <div className="font-mono text-xs text-white/50 text-right">
+            <div className="font-mono text-[11px] text-white/50 text-right">
               <p>©2026 GuiporDI Soluciones.</p>
               <p className="text-[10px] text-white/35">
                 Todos los derechos reservados.

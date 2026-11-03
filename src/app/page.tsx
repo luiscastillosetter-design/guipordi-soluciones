@@ -19,6 +19,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
 } from "lucide-react";
 
 import { PROJECTS_DATA, ProjectItem } from "@/data/projects";
@@ -38,6 +39,10 @@ import {
   PersistentSoundAndIntroBadge,
   useSpatialAudioEngine,
 } from "@/components/ui/ArchitecturalIntroAndAudio";
+import {
+  AIConciergeQuoteModal,
+  WHATSAPP_OFFICIAL_LINK,
+} from "@/components/ui/AIConciergeQuoteModal";
 
 // ============================================================================
 // 1. ESCENA 3D MODULAR
@@ -114,7 +119,6 @@ function StudioScene({
 
   useFrame(() => {
     const prev = scrollRef.current.current;
-    // Interpolación suave y amortiguada para evitar movimientos bruscos
     const next = THREE.MathUtils.lerp(prev, scrollRef.current.target, 0.075);
     scrollRef.current.velocity = (next - prev) * 14.0;
     scrollRef.current.current = next;
@@ -187,7 +191,7 @@ function StudioScene({
 }
 
 // ============================================================================
-// 2. PÁGINA PRINCIPAL COMPLETA (FIX MÓVIL, GIROSCOPIO Y HERO LANZAMIENTOS)
+// 2. PÁGINA PRINCIPAL COMPLETA (CON COTIZADOR IA Y WHATSAPP INTEGRADOS)
 // ============================================================================
 export default function GuiporDIStudioPage() {
   const MAX_SCROLL = 2.15;
@@ -215,6 +219,7 @@ export default function GuiporDIStudioPage() {
   const [showAllWorksGrid, setShowAllWorksGrid] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("TODOS");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
 
   const activeProject = PROJECTS_DATA[activeProjectIdx] || PROJECTS_DATA[0];
 
@@ -228,9 +233,9 @@ export default function GuiporDIStudioPage() {
     scrollProgress > 1.04 &&
     scrollProgress < 1.42 &&
     !showAllWorksGrid &&
-    !selectedProject;
+    !selectedProject &&
+    !showQuoteModal;
 
-  // Solicitar permiso de giroscopio en iOS (si aplica) al interactuar
   const requestMobileGyroPermission = useCallback(() => {
     if (
       typeof window !== "undefined" &&
@@ -256,6 +261,7 @@ export default function GuiporDIStudioPage() {
     setShowAllWorksGrid(false);
     setSelectedProject(null);
     setMobileMenuOpen(false);
+    setShowQuoteModal(false);
   }, []);
 
   const scrollToProjectIndex = useCallback((idx: number) => {
@@ -266,13 +272,13 @@ export default function GuiporDIStudioPage() {
     setShowAllWorksGrid(false);
     setSelectedProject(null);
     setMobileMenuOpen(false);
+    setShowQuoteModal(false);
   }, []);
 
   const scrollToTopHero = useCallback(() => {
     navigateToScroll(0);
   }, [navigateToScroll]);
 
-  // Bloqueo de Pull-to-Refresh nativo en html y body para que jamás se recargue la web al bajar el dedo
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -304,7 +310,6 @@ export default function GuiporDIStudioPage() {
       lastMouseRef.current.y = ny;
     };
 
-    // Giroscopio en Celular: Inclina la G, el texto y la pared LED según cómo gires el teléfono
     const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma === null || e.beta === null) return;
 
@@ -312,9 +317,7 @@ export default function GuiporDIStudioPage() {
         gyroBaseBetaRef.current = e.beta;
       }
 
-      // gamma: inclinación izquierda/derecha (-35° a +35°)
       const tiltX = THREE.MathUtils.clamp(e.gamma / 28, -1, 1);
-      // beta: inclinación adelante/atrás relativa a cómo sostiene el teléfono
       const deltaBeta = e.beta - (gyroBaseBetaRef.current || 45);
       const tiltY = THREE.MathUtils.clamp(-deltaBeta / 28, -1, 1);
 
@@ -322,8 +325,16 @@ export default function GuiporDIStudioPage() {
       const dy = tiltY - lastMouseRef.current.y;
       const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 5.0, 1.2);
 
-      mouseRef.current.x = THREE.MathUtils.lerp(mouseRef.current.x, tiltX, 0.35);
-      mouseRef.current.y = THREE.MathUtils.lerp(mouseRef.current.y, tiltY, 0.35);
+      mouseRef.current.x = THREE.MathUtils.lerp(
+        mouseRef.current.x,
+        tiltX,
+        0.35
+      );
+      mouseRef.current.y = THREE.MathUtils.lerp(
+        mouseRef.current.y,
+        tiltY,
+        0.35
+      );
       mouseRef.current.speed = speed;
 
       lastMouseRef.current.x = mouseRef.current.x;
@@ -331,7 +342,13 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (showIntro || selectedProject || showAllWorksGrid || mobileMenuOpen)
+      if (
+        showIntro ||
+        selectedProject ||
+        showAllWorksGrid ||
+        mobileMenuOpen ||
+        showQuoteModal
+      )
         return;
       const delta = e.deltaY * 0.00045;
       scrollRef.current.target = Math.min(
@@ -348,10 +365,14 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      // Si hay un modal abierto con su propio scroll interno, permitimos el scroll del modal
-      if (selectedProject || showAllWorksGrid || mobileMenuOpen) return;
+      if (
+        selectedProject ||
+        showAllWorksGrid ||
+        mobileMenuOpen ||
+        showQuoteModal
+      )
+        return;
 
-      // CRÍTICO: Evita que Chrome/Safari en el celular disparen Pull-to-Refresh y reinicien la página
       if (e.cancelable) {
         e.preventDefault();
       }
@@ -364,7 +385,6 @@ export default function GuiporDIStudioPage() {
         const dy = touchStartRef.current.y - touchY;
         const dx = touchStartRef.current.x - touchX;
 
-        // También actualizamos la posición interactiva con el dedo en pantalla móvil
         const nx = (touchX / window.innerWidth) * 2 - 1;
         const ny = -(touchY / window.innerHeight) * 2 + 1;
         mouseRef.current.x = nx;
@@ -374,7 +394,6 @@ export default function GuiporDIStudioPage() {
           1.2
         );
 
-        // Sensibilidad táctil 3.5 veces más suave y con tope máximo por fotograma (Cero saltos violentos)
         const rawDelta =
           Math.abs(dx) > Math.abs(dy) ? dx * 0.00055 : dy * 0.00052;
         const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
@@ -390,10 +409,11 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (selectedProject || showAllWorksGrid) {
+      if (selectedProject || showAllWorksGrid || showQuoteModal) {
         if (e.key === "Escape") {
           setSelectedProject(null);
           setShowAllWorksGrid(false);
+          setShowQuoteModal(false);
         }
         return;
       }
@@ -412,7 +432,6 @@ export default function GuiporDIStudioPage() {
     window.addEventListener("deviceorientation", handleDeviceOrientation, true);
     window.addEventListener("wheel", handleWheel, { passive: true });
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    // passive: false es indispensable para bloquear el pull-to-refresh cuando se sube en móvil
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("keydown", handleKeyDown);
 
@@ -428,7 +447,13 @@ export default function GuiporDIStudioPage() {
       window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [showIntro, selectedProject, showAllWorksGrid, mobileMenuOpen]);
+  }, [
+    showIntro,
+    selectedProject,
+    showAllWorksGrid,
+    mobileMenuOpen,
+    showQuoteModal,
+  ]);
 
   const handleNormalUpdate = useCallback((nx: number, ny: number, nz: number) => {
     if (Math.random() < 0.25) {
@@ -460,8 +485,17 @@ export default function GuiporDIStudioPage() {
     [triggerHarmonicChime]
   );
 
+  const openQuoteModalWithSound = useCallback(() => {
+    triggerHarmonicChime();
+    setMobileMenuOpen(false);
+    setShowQuoteModal(true);
+  }, [triggerHarmonicChime]);
+
   const isHeroVisible =
-    scrollProgress <= 0.08 && !showAllWorksGrid && !selectedProject;
+    scrollProgress <= 0.08 &&
+    !showAllWorksGrid &&
+    !selectedProject &&
+    !showQuoteModal;
 
   return (
     <main className="relative w-full h-[100dvh] overflow-hidden overscroll-none bg-[#020304] text-white select-none font-sans">
@@ -496,11 +530,12 @@ export default function GuiporDIStudioPage() {
         scrollProgress={scrollProgress}
         onNavigateScroll={navigateToScroll}
         onOpenCatalog={() => setShowAllWorksGrid(true)}
+        onOpenQuoteModal={openQuoteModalWithSound}
       />
 
-      {/* 3. HEADER SUPERIOR DUAL */}
+      {/* 3. HEADER SUPERIOR DUAL (CON BOTÓN COTIZAR IA EN PC Y MÓVIL) */}
       <header
-        className={`fixed top-0 left-0 right-0 z-40 w-full px-5 md:px-12 lg:px-16 py-4 md:py-6 flex items-center justify-between transition-colors duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-40 w-full px-4 sm:px-6 md:px-12 lg:px-16 py-4 md:py-6 flex items-center justify-between transition-colors duration-300 ${
           isLightVisionMode ? "text-black" : "text-white"
         }`}
       >
@@ -589,18 +624,34 @@ export default function GuiporDIStudioPage() {
           </button>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Botón Cotizador IA en vivo (Visible en PC y en Móvil) */}
           <button
-            onClick={() => navigateToScroll(2.1)}
-            className={`hidden sm:flex px-5 py-2.5 rounded-full border text-xs font-mono tracking-wider uppercase items-center gap-2 transition-all duration-300 cursor-pointer ${
+            onClick={openQuoteModalWithSound}
+            className={`px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full border text-[11px] sm:text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 sm:gap-2 transition-all duration-300 cursor-pointer ${
               isLightVisionMode
                 ? "border-black/30 bg-black text-white hover:bg-emerald-500 hover:text-black"
-                : "border-white/25 bg-black/40 backdrop-blur-md text-white hover:bg-white hover:text-black"
+                : "border-emerald-400/50 bg-emerald-400/15 backdrop-blur-md text-emerald-300 hover:bg-emerald-400 hover:text-black shadow-lg shadow-emerald-500/10"
             }`}
           >
-            <span>Contacto / Cotizar</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Cotizar con IA</span>
           </button>
+
+          {/* Enlace rápido a WhatsApp en PC */}
+          <a
+            href={WHATSAPP_OFFICIAL_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`hidden lg:flex w-10 h-10 rounded-full border items-center justify-center transition-all duration-300 cursor-pointer ${
+              isLightVisionMode
+                ? "border-black/25 bg-black/5 text-black hover:bg-black hover:text-white"
+                : "border-white/20 bg-black/40 backdrop-blur-md text-white hover:border-emerald-400 hover:text-emerald-400"
+            }`}
+            title="Hablar directamente por WhatsApp"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </a>
 
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -616,12 +667,17 @@ export default function GuiporDIStudioPage() {
         </div>
       </header>
 
-      {/* 4. MENÚ MÓVIL TIPO ALCHE */}
+      {/* 4. MENÚ MÓVIL TIPO ALCHE CON COTIZADOR IA Y WHATSAPP */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col justify-between px-7 pt-24 pb-20 md:hidden">
-          <div className="space-y-4 font-mono">
+          <div className="space-y-3.5 font-mono">
             {[
               { label: "Inicio", action: scrollToTopHero },
+              {
+                label: "⚡ Cotizar Proyecto con IA",
+                action: openQuoteModalWithSound,
+                highlight: true,
+              },
               {
                 label: "Carrusel 3D de Proyectos",
                 action: () => scrollToProjectIndex(0),
@@ -649,19 +705,33 @@ export default function GuiporDIStudioPage() {
               <button
                 key={i}
                 onClick={item.action}
-                className="w-full text-left flex items-center gap-4 text-lg tracking-wide text-white/90 hover:text-emerald-400 py-2 border-b border-white/10"
+                className={`w-full text-left flex items-center gap-4 text-base sm:text-lg tracking-wide py-2 border-b border-white/10 ${
+                  item.highlight
+                    ? "text-emerald-400 font-bold"
+                    : "text-white/90 hover:text-emerald-400"
+                }`}
               >
                 <span className="w-4 h-[1px] bg-emerald-400" />
                 <span>{item.label}</span>
               </button>
             ))}
+
+            <a
+              href={WHATSAPP_OFFICIAL_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 mt-4 py-3 rounded-xl bg-emerald-400 text-black font-mono text-xs font-extrabold uppercase tracking-wider"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>WhatsApp Directo con Luis Castillo</span>
+            </a>
           </div>
 
-          <div className="font-mono text-xs text-white/50 space-y-2 border-t border-white/15 pt-5">
+          <div className="font-mono text-xs text-white/50 space-y-1 border-t border-white/15 pt-4">
             <p className="text-emerald-400 uppercase tracking-widest">
               GuiporDI Soluciones
             </p>
-            <p>Arquitectura de Software, E-Commerce & Experiencias WebGL</p>
+            <p>Entornos de Ventas Digitales, E-Commerce & IA</p>
           </div>
         </div>
       )}
@@ -754,8 +824,7 @@ export default function GuiporDIStudioPage() {
         ))}
       </div>
 
-      {/* 7. HUD ESTADO 1: HERO INICIAL (SIN TRANSFORM PADRE QUE ROMPA FIXED) */}
-      {/* 7A. Indicador Vertical "Desliza para explorar" (Móvil y PC) */}
+      {/* 7. HUD ESTADO 1: HERO INICIAL */}
       <div
         className={`fixed right-3.5 sm:right-6 bottom-28 sm:bottom-24 z-20 flex flex-col items-center gap-2 transition-opacity duration-500 ${
           isHeroVisible
@@ -773,7 +842,6 @@ export default function GuiporDIStudioPage() {
         <span className="w-[1px] h-10 bg-gradient-to-b from-emerald-400 via-emerald-400/50 to-transparent animate-pulse" />
       </div>
 
-      {/* 7B. Bloque "Últimos Lanzamientos" (Visible en Hero tanto en Celular como en PC) */}
       <section
         className={`fixed left-5 right-12 sm:left-auto sm:right-12 lg:right-16 ${
           showSoundPrompt ? "bottom-24 sm:bottom-20" : "bottom-14 sm:bottom-16"
@@ -796,7 +864,6 @@ export default function GuiporDIStudioPage() {
           </button>
         </div>
 
-        {/* En móvil mostramos los 2 más recientes (igual a Alche Móvil 00:08) y en PC los 4 */}
         <div className="space-y-2 border-t border-white/20 pt-2 bg-black/35 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none p-2.5 sm:p-0 rounded-lg sm:rounded-none">
           {PROJECTS_DATA.slice(0, 4).map((item, idx) => (
             <div
@@ -817,17 +884,16 @@ export default function GuiporDIStudioPage() {
         </div>
       </section>
 
-      {/* 7C. Coordenadas Técnicas Abajo a la Izquierda en Hero (PC) */}
       <div
         className={`fixed bottom-20 left-6 md:left-12 lg:left-16 z-20 pointer-events-none hidden sm:block transition-opacity duration-500 ${
           isHeroVisible ? "opacity-100" : "opacity-0"
         }`}
       >
         <p className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">
-          ARQUITECTURA DE SOFTWARE & EXPERIENCIAS WEBGL
+          ENTORNOS DE VENTAS DIGITALES, E-COMMERCE & IA
         </p>
         <p className="font-mono text-xs text-white/80 mt-1">
-          Desliza para explorar nuestros 9 proyectos en tiempo real.
+          Desliza para explorar nuestros 9 proyectos o cotiza en vivo con IA.
         </p>
       </div>
 
@@ -836,7 +902,10 @@ export default function GuiporDIStudioPage() {
         className={`fixed inset-x-0 ${
           showSoundPrompt ? "bottom-20 sm:bottom-16" : "bottom-12 sm:bottom-14"
         } z-20 px-4 sm:px-6 md:px-12 lg:px-16 transition-opacity duration-500 ${
-          inWorksSection && !showAllWorksGrid && !selectedProject
+          inWorksSection &&
+          !showAllWorksGrid &&
+          !selectedProject &&
+          !showQuoteModal
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
         }`}
@@ -937,7 +1006,7 @@ export default function GuiporDIStudioPage() {
         </div>
       </div>
 
-      {/* 9. MODALES MODULARES */}
+      {/* 9. MODALES DE PROYECTOS Y COTIZADOR IA */}
       <ProjectDetailModal
         selectedProject={selectedProject}
         detailDeviceView={detailDeviceView}
@@ -954,7 +1023,12 @@ export default function GuiporDIStudioPage() {
         onSelectProject={openProjectModal}
       />
 
-      {/* 10. CONTROL FLOTANTE PERSISTENTE DE SONIDO E INTRO (ESQUINA INFERIOR IZQUIERDA) */}
+      <AIConciergeQuoteModal
+        isOpen={showQuoteModal}
+        onClose={() => setShowQuoteModal(false)}
+      />
+
+      {/* 10. CONTROL FLOTANTE PERSISTENTE DE SONIDO E INTRO */}
       {!showSoundPrompt && (
         <PersistentSoundAndIntroBadge
           soundEnabled={soundEnabled}
@@ -970,7 +1044,7 @@ export default function GuiporDIStudioPage() {
         />
       )}
 
-      {/* 11. BARRA INFERIOR DE BIENVENIDA DE SONIDO (SIN TEXTO CORTADO EN MÓVIL) */}
+      {/* 11. BARRA INFERIOR DE BIENVENIDA DE SONIDO */}
       {showSoundPrompt && (
         <footer className="fixed bottom-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-xl border-t border-white/15 px-4 sm:px-8 md:px-12 lg:px-16 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2.5 text-[10px] sm:text-xs font-mono text-white/85 text-center sm:text-left">
