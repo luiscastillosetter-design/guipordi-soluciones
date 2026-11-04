@@ -376,9 +376,57 @@ export default function GuiporDIStudioPage() {
       );
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        touchStartRef.current.x = e.touches[0].clientX;
+        touchStartRef.current.y = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (
+        selectedProject ||
+        showAllWorksGrid ||
+        mobileMenuOpen ||
+        showQuoteModal ||
+        showIntro
+      )
+        return;
+
+      if (e.touches.length > 0) {
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        const dy = touchStartRef.current.y - touchY;
+        const dx = touchStartRef.current.x - touchX;
+
+        const nx = (touchX / window.innerWidth) * 2 - 1;
+        const ny = -(touchY / window.innerHeight) * 2 + 1;
+        mouseRef.current.x = nx;
+        mouseRef.current.y = ny;
+        mouseRef.current.speed = Math.min(
+          Math.sqrt(dx * dx + dy * dy) * 0.04,
+          1.2
+        );
+
+        const rawDelta =
+          Math.abs(dx) > Math.abs(dy) ? dx * 0.00055 : dy * 0.00052;
+        const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
+
+        scrollRef.current.target = Math.min(
+          Math.max(scrollRef.current.target + clampedDelta, 0),
+          MAX_SCROLL
+        );
+
+        touchStartRef.current.x = touchX;
+        touchStartRef.current.y = touchY;
+      }
+    };
+
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("deviceorientation", handleDeviceOrientation, true);
     window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
@@ -388,6 +436,8 @@ export default function GuiporDIStudioPage() {
         true
       );
       window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
     };
   }, [
     showIntro,
