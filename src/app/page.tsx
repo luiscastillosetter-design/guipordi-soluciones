@@ -230,6 +230,22 @@ export default function GuiporDIStudioPage() {
       .catch(() => {});
   }, [setProjectsList]);
 
+  // Bloquea el "Pull-to-refresh" nativo de los navegadores móviles
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverscroll = html.style.overscrollBehaviorY;
+    const prevBodyOverscroll = body.style.overscrollBehaviorY;
+
+    html.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+
+    return () => {
+      html.style.overscrollBehaviorY = prevHtmlOverscroll;
+      body.style.overscrollBehaviorY = prevBodyOverscroll;
+    };
+  }, []);
+
   const carouselProjects = useMemo(() => {
     const list = projectsList.filter((p) => p.in3dCarousel);
     return list.length > 0 ? list : projectsList.slice(0, 9);
