@@ -218,7 +218,6 @@ export default function GuiporDIStudioPage() {
       ? useState<ProjectItem[]>(FALLBACK_PROJECTS)
       : useState<ProjectItem[]>(FALLBACK_PROJECTS);
 
-  // Cargar catálogo dinámico desde Supabase (API /admin-erp?mode=public_catalog)
   useEffect(() => {
     fetch("/api/admin-erp?mode=public_catalog")
       .then((res) => res.json())
@@ -723,6 +722,167 @@ export default function GuiporDIStudioPage() {
           </div>
         </div>
       )}
+
+      {/* 5. WIDGET DIRECCIÓN NORMAL (PC) */}
+      {scrollProgress < 1.03 && (
+        <aside className="hidden lg:flex fixed top-24 right-12 lg:right-16 z-20 flex-col items-end font-mono text-[10px] text-white/65 space-y-2 pointer-events-none">
+          <div className="text-right">
+            <p className="uppercase tracking-widest text-white/40 mb-0.5">
+              Dirección Normal
+            </p>
+            <p className="text-white/90 tracking-wider">
+              (x, y, z) = ({normalVec.x >= 0 ? `+${normalVec.x}` : normalVec.x},{" "}
+              {normalVec.y >= 0 ? `+${normalVec.y}` : normalVec.y},{" "}
+              {normalVec.z >= 0 ? `+${normalVec.z}` : normalVec.z})
+            </p>
+          </div>
+
+          <div className="w-16 h-16 rounded-full border border-white/15 bg-black/40 backdrop-blur-sm relative flex items-center justify-center">
+            <div className="absolute inset-2 rounded-full border border-dashed border-white/15" />
+            <div
+              className="relative w-10 h-10 transition-transform duration-150 ease-out"
+              style={{
+                transform: `rotateX(${normalVec.y * 45}deg) rotateY(${normalVec.x * 45}deg)`,
+              }}
+            >
+              <span className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-rose-500 text-[7px] font-bold text-black flex items-center justify-center">
+                X
+              </span>
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-emerald-400 text-[7px] font-bold text-black flex items-center justify-center">
+                Y
+              </span>
+              <span className="absolute bottom-1 left-1 w-2.5 h-2.5 rounded-full bg-sky-400 text-[7px] font-bold text-black flex items-center justify-center">
+                Z
+              </span>
+              <div className="absolute inset-0 m-auto w-1.5 h-1.5 rounded-full bg-white" />
+            </div>
+          </div>
+          <span className="text-[9px] tracking-widest uppercase text-white/40">
+            {inWorksSection
+              ? `Proyecto ${activeProject.id} / ${carouselProjects.length}`
+              : "Refracción Activa"}
+          </span>
+        </aside>
+      )}
+
+      {/* 6. INDICADOR LATERAL IZQUIERDO DE SECCIONES (PC) */}
+      <div
+        className={`hidden md:flex fixed left-6 md:left-12 top-1/2 -translate-y-1/2 z-30 flex-col gap-3 font-mono text-[10px] tracking-[0.25em] uppercase ${
+          isLightVisionMode ? "text-black" : "text-white"
+        }`}
+      >
+        {[
+          { label: "INICIO", target: 0, active: scrollProgress < 0.09 },
+          {
+            label: "PROYECTOS",
+            target: 0.16,
+            active: scrollProgress >= 0.09 && scrollProgress < 1.03,
+          },
+          {
+            label: "VISIÓN",
+            target: 1.18,
+            active: scrollProgress >= 1.03 && scrollProgress < 1.42,
+          },
+          {
+            label: "SERVICIOS",
+            target: 1.62,
+            active: scrollProgress >= 1.42 && scrollProgress < 1.88,
+          },
+          {
+            label: "CONTACTO",
+            target: 2.1,
+            active: scrollProgress >= 1.88,
+          },
+        ].map((sec) => (
+          <button
+            key={sec.label}
+            onClick={() => navigateToScroll(sec.target)}
+            className={`flex items-center gap-3 transition-all cursor-pointer ${
+              sec.active ? "font-bold opacity-100" : "opacity-35 hover:opacity-75"
+            }`}
+          >
+            <span
+              className={`h-[1.5px] transition-all ${
+                sec.active ? "w-5 bg-emerald-500" : "w-2 bg-current"
+              }`}
+            />
+            <span>{sec.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 7. HUD ESTADO 1: HERO INICIAL */}
+      <div
+        className={`fixed right-3.5 sm:right-6 bottom-28 sm:bottom-24 z-20 flex flex-col items-center gap-2 transition-opacity duration-500 ${
+          isHeroVisible
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button
+          onClick={() => scrollToProjectIndex(0)}
+          className="font-mono text-[9px] sm:text-[10px] tracking-[0.26em] text-white/75 hover:text-emerald-400 uppercase cursor-pointer"
+          style={{ writingMode: "vertical-rl" }}
+        >
+          scroll to explore
+        </button>
+        <span className="w-[1px] h-10 bg-gradient-to-b from-emerald-400 via-emerald-400/50 to-transparent animate-pulse" />
+      </div>
+
+      <section
+        className={`fixed left-5 right-12 sm:left-auto sm:right-12 lg:right-16 ${
+          showSoundPrompt ? "bottom-24 sm:bottom-20" : "bottom-14 sm:bottom-16"
+        } z-20 sm:w-[350px] font-mono transition-opacity duration-500 ${
+          isHeroVisible
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="text-[10px] tracking-[0.26em] uppercase text-emerald-400 mb-2 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3" />
+            <span>Últimos Lanzamientos</span>
+          </span>
+          <button
+            onClick={() => scrollToProjectIndex(0)}
+            className="text-white/70 hover:text-white underline cursor-pointer text-[10px]"
+          >
+            Explorar 3D ↓
+          </button>
+        </div>
+
+        <div className="space-y-2 border-t border-white/20 pt-2 bg-black/35 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none p-2.5 sm:p-0 rounded-lg sm:rounded-none">
+          {carouselProjects.slice(0, 4).map((item, idx) => (
+            <div
+              key={item.slug}
+              onClick={() => scrollToProjectIndex(idx)}
+              className={`${
+                idx >= 2 ? "hidden sm:block" : "block"
+              } group border-b border-white/10 pb-1.5 cursor-pointer transition-all duration-200 hover:border-emerald-400/50`}
+            >
+              <p className="text-[10px] text-white/50 group-hover:text-emerald-400 transition-colors">
+                {item.date}
+              </p>
+              <p className="text-xs text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all truncate">
+                {item.title}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div
+        className={`fixed bottom-20 left-6 md:left-12 lg:left-16 z-20 pointer-events-none hidden sm:block transition-opacity duration-500 ${
+          isHeroVisible ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <p className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">
+          ENTORNOS DE VENTAS DIGITALES, E-COMMERCE & IA
+        </p>
+        <p className="font-mono text-xs text-white/80 mt-1">
+          Desliza para explorar nuestros proyectos y demos o cotiza en vivo con IA.
+        </p>
+      </div>
 
       {/* HUD INFERIOR: CARRUSEL 3D */}
       <div
