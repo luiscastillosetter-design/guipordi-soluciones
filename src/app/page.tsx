@@ -20,9 +20,13 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
+  Globe,
 } from "lucide-react";
 
-import { PROJECTS_DATA, ProjectItem } from "@/data/projects";
+import {
+  PROJECTS_DATA as FALLBACK_PROJECTS,
+  ProjectItem,
+} from "@/data/projects";
 import {
   CurvedLEDWall,
   BrandTypographyPlane,
@@ -45,7 +49,7 @@ import {
 } from "@/components/ui/AIConciergeQuoteModal";
 
 // ============================================================================
-// 1. ESCENA 3D MODULAR
+// ESCENA 3D MODULAR
 // ============================================================================
 function StudioScene({
   mouseRef,
@@ -53,6 +57,7 @@ function StudioScene({
   onNormalUpdate,
   onScrollStateUpdate,
   onSelectProject,
+  projectsList,
 }: {
   mouseRef: React.MutableRefObject<{ x: number; y: number; speed: number }>;
   scrollRef: React.MutableRefObject<{
@@ -67,8 +72,14 @@ function StudioScene({
     progress: number
   ) => void;
   onSelectProject: (p: ProjectItem) => void;
+  projectsList: ProjectItem[];
 }) {
   const [, setTexReadyTick] = useState(0);
+
+  const carouselProjects = useMemo(() => {
+    const list = projectsList.filter((p) => p.in3dCarousel);
+    return list.length > 0 ? list : projectsList.slice(0, 9);
+  }, [projectsList]);
 
   const projectTextures = useMemo(() => {
     const loader = new THREE.TextureLoader();
@@ -83,12 +94,12 @@ function StudioScene({
     }
     const fallbackTex = new THREE.CanvasTexture(fallbackCanvas);
 
-    const desktop: THREE.Texture[] = PROJECTS_DATA.map(() => fallbackTex);
-    const mobile: THREE.Texture[] = PROJECTS_DATA.map(() => fallbackTex);
-    const desktopAspects: number[] = PROJECTS_DATA.map(() => 16 / 9);
-    const mobileAspects: number[] = PROJECTS_DATA.map(() => 9 / 16);
+    const desktop: THREE.Texture[] = carouselProjects.map(() => fallbackTex);
+    const mobile: THREE.Texture[] = carouselProjects.map(() => fallbackTex);
+    const desktopAspects: number[] = carouselProjects.map(() => 16 / 9);
+    const mobileAspects: number[] = carouselProjects.map(() => 9 / 16);
 
-    PROJECTS_DATA.forEach((p, idx) => {
+    carouselProjects.forEach((p, idx) => {
       loader.load(p.desktopImg, (tex) => {
         tex.minFilter = THREE.LinearFilter;
         tex.magFilter = THREE.LinearFilter;
@@ -115,7 +126,7 @@ function StudioScene({
     });
 
     return { desktop, mobile, desktopAspects, mobileAspects };
-  }, []);
+  }, [carouselProjects]);
 
   useFrame(() => {
     const prev = scrollRef.current.current;
@@ -124,7 +135,7 @@ function StudioScene({
     scrollRef.current.current = next;
 
     const inWorks = next > 0.09 && next < 1.03;
-    const total = PROJECTS_DATA.length;
+    const total = carouselProjects.length;
     const carouselProgress = Math.max(0, (next - 0.14) / 0.86) * (total - 1);
     const activeIdx = Math.min(
       Math.max(Math.round(carouselProgress), 0),
@@ -191,7 +202,7 @@ function StudioScene({
 }
 
 // ============================================================================
-// 2. PÁGINA PRINCIPAL COMPLETA (CON COTIZADOR IA Y WHATSAPP INTEGRADOS)
+// PÁGINA PRINCIPAL
 // ============================================================================
 export default function GuiporDIStudioPage() {
   const MAX_SCROLL = 2.15;
@@ -201,6 +212,28 @@ export default function GuiporDIStudioPage() {
   const scrollRef = useRef({ current: 0, target: 0, velocity: 0 });
   const touchStartRef = useRef({ x: 0, y: 0 });
   const gyroBaseBetaRef = useRef<number | null>(null);
+
+  const [projectsList, setProjectsList] =
+    useRef<ProjectItem[]>(FALLBACK_PROJECTS).current === FALLBACK_PROJECTS
+      ? useState<ProjectItem[]>(FALLBACK_PROJECTS)
+      : useState<ProjectItem[]>(FALLBACK_PROJECTS);
+
+  // Cargar catálogo dinámico desde Supabase (API /admin-erp?mode=public_catalog)
+  useEffect(() => {
+    fetch("/api/admin-erp?mode=public_catalog")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.catalog && Array.isArray(data.catalog) && data.catalog.length > 0) {
+          setProjectsList(data.catalog);
+        }
+      })
+      .catch(() => {});
+  }, [setProjectsList]);
+
+  const carouselProjects = useMemo(() => {
+    const list = projectsList.filter((p) => p.in3dCarousel);
+    return list.length > 0 ? list : projectsList.slice(0, 9);
+  }, [projectsList]);
 
   const [showIntro, setShowIntro] = useState(true);
   const [normalVec, setNormalVec] = useState({ x: 0.0, y: -0.08, z: 1.0 });
@@ -221,7 +254,8 @@ export default function GuiporDIStudioPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
 
-  const activeProject = PROJECTS_DATA[activeProjectIdx] || PROJECTS_DATA[0];
+  const activeProject =
+    carouselProjects[activeProjectIdx] || carouselProjects[0] || projectsList[0];
 
   const { triggerHarmonicChime } = useSpatialAudioEngine(
     soundEnabled,
@@ -265,7 +299,7 @@ export default function GuiporDIStudioPage() {
   }, []);
 
   const scrollToProjectIndex = useCallback((idx: number) => {
-    const total = PROJECTS_DATA.length;
+    const total = carouselProjects.length;
     const clampedIdx = Math.min(Math.max(idx, 0), total - 1);
     const targetScroll = 0.14 + (clampedIdx / (total - 1)) * 0.86;
     scrollRef.current.target = targetScroll;
@@ -273,26 +307,11 @@ export default function GuiporDIStudioPage() {
     setSelectedProject(null);
     setMobileMenuOpen(false);
     setShowQuoteModal(false);
-  }, []);
+  }, [carouselProjects.length]);
 
   const scrollToTopHero = useCallback(() => {
     navigateToScroll(0);
   }, [navigateToScroll]);
-
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const prevHtmlOverscroll = html.style.overscrollBehaviorY;
-    const prevBodyOverscroll = body.style.overscrollBehaviorY;
-
-    html.style.overscrollBehaviorY = "none";
-    body.style.overscrollBehaviorY = "none";
-
-    return () => {
-      html.style.overscrollBehaviorY = prevHtmlOverscroll;
-      body.style.overscrollBehaviorY = prevBodyOverscroll;
-    };
-  }, []);
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
@@ -357,83 +376,9 @@ export default function GuiporDIStudioPage() {
       );
     };
 
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        touchStartRef.current.x = e.touches[0].clientX;
-        touchStartRef.current.y = e.touches[0].clientY;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (
-        selectedProject ||
-        showAllWorksGrid ||
-        mobileMenuOpen ||
-        showQuoteModal
-      )
-        return;
-
-      if (e.cancelable) {
-        e.preventDefault();
-      }
-
-      if (showIntro) return;
-
-      if (e.touches.length > 0) {
-        const touchX = e.touches[0].clientX;
-        const touchY = e.touches[0].clientY;
-        const dy = touchStartRef.current.y - touchY;
-        const dx = touchStartRef.current.x - touchX;
-
-        const nx = (touchX / window.innerWidth) * 2 - 1;
-        const ny = -(touchY / window.innerHeight) * 2 + 1;
-        mouseRef.current.x = nx;
-        mouseRef.current.y = ny;
-        mouseRef.current.speed = Math.min(
-          Math.sqrt(dx * dx + dy * dy) * 0.04,
-          1.2
-        );
-
-        const rawDelta =
-          Math.abs(dx) > Math.abs(dy) ? dx * 0.00055 : dy * 0.00052;
-        const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
-
-        scrollRef.current.target = Math.min(
-          Math.max(scrollRef.current.target + clampedDelta, 0),
-          MAX_SCROLL
-        );
-
-        touchStartRef.current.x = touchX;
-        touchStartRef.current.y = touchY;
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (selectedProject || showAllWorksGrid || showQuoteModal) {
-        if (e.key === "Escape") {
-          setSelectedProject(null);
-          setShowAllWorksGrid(false);
-          setShowQuoteModal(false);
-        }
-        return;
-      }
-      if (showIntro) return;
-      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        scrollRef.current.target = Math.min(
-          scrollRef.current.target + 0.11,
-          MAX_SCROLL
-        );
-      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        scrollRef.current.target = Math.max(scrollRef.current.target - 0.11, 0);
-      }
-    };
-
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("deviceorientation", handleDeviceOrientation, true);
     window.addEventListener("wheel", handleWheel, { passive: true });
-    window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
@@ -443,9 +388,6 @@ export default function GuiporDIStudioPage() {
         true
       );
       window.removeEventListener("wheel", handleWheel);
-      window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [
     showIntro,
@@ -499,12 +441,10 @@ export default function GuiporDIStudioPage() {
 
   return (
     <main className="relative w-full h-[100dvh] overflow-hidden overscroll-none bg-[#020304] text-white select-none font-sans">
-      {/* 0. INTRO CINÉTICA DE COMPÁS ARQUITECTÓNICO */}
       {showIntro && (
         <ArchitecturalCompassIntro onFinish={() => setShowIntro(false)} />
       )}
 
-      {/* 1. LIENZO WEBGL 3D */}
       <div className="fixed inset-0 z-0">
         <Canvas
           camera={{ position: [0, 0, 6.5], fov: 45 }}
@@ -521,11 +461,11 @@ export default function GuiporDIStudioPage() {
             onNormalUpdate={handleNormalUpdate}
             onScrollStateUpdate={handleScrollStateUpdate}
             onSelectProject={openProjectModal}
+            projectsList={projectsList}
           />
         </Canvas>
       </div>
 
-      {/* 2. SECCIONES DE CONTINUACIÓN DEL SCROLL: VISIÓN + SERVICIOS + FOOTER */}
       <VisionServicesFooter
         scrollProgress={scrollProgress}
         onNavigateScroll={navigateToScroll}
@@ -533,7 +473,6 @@ export default function GuiporDIStudioPage() {
         onOpenQuoteModal={openQuoteModalWithSound}
       />
 
-      {/* 3. HEADER SUPERIOR DUAL (CON BOTÓN COTIZAR IA EN PC Y MÓVIL) */}
       <header
         className={`fixed top-0 left-0 right-0 z-40 w-full px-4 sm:px-6 md:px-12 lg:px-16 py-4 md:py-6 flex items-center justify-between transition-colors duration-300 ${
           isLightVisionMode ? "text-black" : "text-white"
@@ -573,7 +512,7 @@ export default function GuiporDIStudioPage() {
         >
           <button
             onClick={scrollToTopHero}
-            className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+            className={`relative py-1 cursor-pointer ${
               scrollProgress < 0.09 && !showAllWorksGrid
                 ? "text-emerald-500 font-bold"
                 : ""
@@ -583,17 +522,17 @@ export default function GuiporDIStudioPage() {
           </button>
           <button
             onClick={() => scrollToProjectIndex(0)}
-            className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+            className={`relative py-1 cursor-pointer ${
               inWorksSection && !showAllWorksGrid
                 ? "text-emerald-400 font-bold"
                 : ""
             }`}
           >
-            Proyectos
+            Proyectos 3D
           </button>
           <button
             onClick={() => navigateToScroll(1.18)}
-            className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+            className={`relative py-1 cursor-pointer ${
               scrollProgress >= 1.03 && scrollProgress < 1.42
                 ? "text-emerald-600 font-bold"
                 : ""
@@ -603,7 +542,7 @@ export default function GuiporDIStudioPage() {
           </button>
           <button
             onClick={() => navigateToScroll(1.62)}
-            className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+            className={`relative py-1 cursor-pointer ${
               scrollProgress >= 1.42 && scrollProgress < 1.88
                 ? "text-emerald-400 font-bold"
                 : ""
@@ -616,16 +555,15 @@ export default function GuiporDIStudioPage() {
               setSelectedProject(null);
               setShowAllWorksGrid(true);
             }}
-            className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+            className={`relative py-1 cursor-pointer ${
               showAllWorksGrid ? "text-emerald-400 font-bold" : ""
             }`}
           >
-            Catálogo ({PROJECTS_DATA.length})
+            Catálogo & Demos ({projectsList.length})
           </button>
         </nav>
 
         <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Botón Cotizador IA en vivo (Visible en PC y en Móvil) */}
           <button
             onClick={openQuoteModalWithSound}
             className={`px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full border text-[11px] sm:text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 sm:gap-2 transition-all duration-300 cursor-pointer ${
@@ -638,7 +576,6 @@ export default function GuiporDIStudioPage() {
             <span>Cotizar con IA</span>
           </button>
 
-          {/* Enlace rápido a WhatsApp en PC */}
           <a
             href={WHATSAPP_OFFICIAL_LINK}
             target="_blank"
@@ -655,8 +592,7 @@ export default function GuiporDIStudioPage() {
 
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden w-10 h-10 rounded-full border border-white/20 bg-black/60 backdrop-blur-md flex items-center justify-center text-white hover:border-emerald-400 transition-colors cursor-pointer"
-            aria-label="Abrir menú"
+            className="md:hidden w-10 h-10 rounded-full border border-white/20 bg-black/60 backdrop-blur-md flex items-center justify-center text-white cursor-pointer"
           >
             {mobileMenuOpen ? (
               <X className="w-5 h-5" />
@@ -667,10 +603,10 @@ export default function GuiporDIStudioPage() {
         </div>
       </header>
 
-      {/* 4. MENÚ MÓVIL TIPO ALCHE CON COTIZADOR IA Y WHATSAPP */}
+      {/* MENÚ MÓVIL */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col justify-between px-7 pt-24 pb-20 md:hidden">
-          <div className="space-y-3.5 font-mono">
+        <div className="fixed inset-0 z-30 bg-black/90 backdrop-blur-xl flex flex-col justify-between px-7 pt-24 pb-20 md:hidden font-mono">
+          <div className="space-y-3.5">
             {[
               { label: "Inicio", action: scrollToTopHero },
               {
@@ -683,32 +619,25 @@ export default function GuiporDIStudioPage() {
                 action: () => scrollToProjectIndex(0),
               },
               {
-                label: `Catálogo Completo (${PROJECTS_DATA.length})`,
+                label: `Catálogo & Mostrador SaaS (${projectsList.length})`,
                 action: () => {
                   setMobileMenuOpen(false);
                   setShowAllWorksGrid(true);
                 },
               },
-              {
-                label: "Nuestra Visión",
-                action: () => navigateToScroll(1.18),
-              },
+              { label: "Nuestra Visión", action: () => navigateToScroll(1.18) },
               {
                 label: "Servicios & GuiporDI IA",
                 action: () => navigateToScroll(1.62),
-              },
-              {
-                label: "Contacto / Footer",
-                action: () => navigateToScroll(2.1),
               },
             ].map((item, i) => (
               <button
                 key={i}
                 onClick={item.action}
-                className={`w-full text-left flex items-center gap-4 text-base sm:text-lg tracking-wide py-2 border-b border-white/10 ${
+                className={`w-full text-left flex items-center gap-4 text-base py-2 border-b border-white/10 ${
                   item.highlight
                     ? "text-emerald-400 font-bold"
-                    : "text-white/90 hover:text-emerald-400"
+                    : "text-white/90"
                 }`}
               >
                 <span className="w-4 h-[1px] bg-emerald-400" />
@@ -726,178 +655,10 @@ export default function GuiporDIStudioPage() {
               <span>WhatsApp Directo con Luis Castillo</span>
             </a>
           </div>
-
-          <div className="font-mono text-xs text-white/50 space-y-1 border-t border-white/15 pt-4">
-            <p className="text-emerald-400 uppercase tracking-widest">
-              GuiporDI Soluciones
-            </p>
-            <p>Entornos de Ventas Digitales, E-Commerce & IA</p>
-          </div>
         </div>
       )}
 
-      {/* 5. WIDGET DIRECCIÓN NORMAL (PC) */}
-      {scrollProgress < 1.03 && (
-        <aside className="hidden lg:flex fixed top-24 right-12 lg:right-16 z-20 flex-col items-end font-mono text-[10px] text-white/65 space-y-2 pointer-events-none">
-          <div className="text-right">
-            <p className="uppercase tracking-widest text-white/40 mb-0.5">
-              Dirección Normal
-            </p>
-            <p className="text-white/90 tracking-wider">
-              (x, y, z) = ({normalVec.x >= 0 ? `+${normalVec.x}` : normalVec.x},{" "}
-              {normalVec.y >= 0 ? `+${normalVec.y}` : normalVec.y},{" "}
-              {normalVec.z >= 0 ? `+${normalVec.z}` : normalVec.z})
-            </p>
-          </div>
-
-          <div className="w-16 h-16 rounded-full border border-white/15 bg-black/40 backdrop-blur-sm relative flex items-center justify-center">
-            <div className="absolute inset-2 rounded-full border border-dashed border-white/15" />
-            <div
-              className="relative w-10 h-10 transition-transform duration-150 ease-out"
-              style={{
-                transform: `rotateX(${normalVec.y * 45}deg) rotateY(${normalVec.x * 45}deg)`,
-              }}
-            >
-              <span className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-rose-500 text-[7px] font-bold text-black flex items-center justify-center">
-                X
-              </span>
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-emerald-400 text-[7px] font-bold text-black flex items-center justify-center">
-                Y
-              </span>
-              <span className="absolute bottom-1 left-1 w-2.5 h-2.5 rounded-full bg-sky-400 text-[7px] font-bold text-black flex items-center justify-center">
-                Z
-              </span>
-              <div className="absolute inset-0 m-auto w-1.5 h-1.5 rounded-full bg-white" />
-            </div>
-          </div>
-          <span className="text-[9px] tracking-widest uppercase text-white/40">
-            {inWorksSection
-              ? `Proyecto ${activeProject.id} / 09`
-              : "Refracción Activa"}
-          </span>
-        </aside>
-      )}
-
-      {/* 6. INDICADOR LATERAL IZQUIERDO DE SECCIONES (PC) */}
-      <div
-        className={`hidden md:flex fixed left-6 md:left-12 top-1/2 -translate-y-1/2 z-30 flex-col gap-3 font-mono text-[10px] tracking-[0.25em] uppercase ${
-          isLightVisionMode ? "text-black" : "text-white"
-        }`}
-      >
-        {[
-          { label: "INICIO", target: 0, active: scrollProgress < 0.09 },
-          {
-            label: "PROYECTOS",
-            target: 0.16,
-            active: scrollProgress >= 0.09 && scrollProgress < 1.03,
-          },
-          {
-            label: "VISIÓN",
-            target: 1.18,
-            active: scrollProgress >= 1.03 && scrollProgress < 1.42,
-          },
-          {
-            label: "SERVICIOS",
-            target: 1.62,
-            active: scrollProgress >= 1.42 && scrollProgress < 1.88,
-          },
-          {
-            label: "CONTACTO",
-            target: 2.1,
-            active: scrollProgress >= 1.88,
-          },
-        ].map((sec) => (
-          <button
-            key={sec.label}
-            onClick={() => navigateToScroll(sec.target)}
-            className={`flex items-center gap-3 transition-all cursor-pointer ${
-              sec.active ? "font-bold opacity-100" : "opacity-35 hover:opacity-75"
-            }`}
-          >
-            <span
-              className={`h-[1.5px] transition-all ${
-                sec.active ? "w-5 bg-emerald-500" : "w-2 bg-current"
-              }`}
-            />
-            <span>{sec.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* 7. HUD ESTADO 1: HERO INICIAL */}
-      <div
-        className={`fixed right-3.5 sm:right-6 bottom-28 sm:bottom-24 z-20 flex flex-col items-center gap-2 transition-opacity duration-500 ${
-          isHeroVisible
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <button
-          onClick={() => scrollToProjectIndex(0)}
-          className="font-mono text-[9px] sm:text-[10px] tracking-[0.26em] text-white/75 hover:text-emerald-400 uppercase cursor-pointer"
-          style={{ writingMode: "vertical-rl" }}
-        >
-          scroll to explore
-        </button>
-        <span className="w-[1px] h-10 bg-gradient-to-b from-emerald-400 via-emerald-400/50 to-transparent animate-pulse" />
-      </div>
-
-      <section
-        className={`fixed left-5 right-12 sm:left-auto sm:right-12 lg:right-16 ${
-          showSoundPrompt ? "bottom-24 sm:bottom-20" : "bottom-14 sm:bottom-16"
-        } z-20 sm:w-[350px] font-mono transition-opacity duration-500 ${
-          isHeroVisible
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <div className="text-[10px] tracking-[0.26em] uppercase text-emerald-400 mb-2 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3" />
-            <span>Últimos Lanzamientos</span>
-          </span>
-          <button
-            onClick={() => scrollToProjectIndex(0)}
-            className="text-white/70 hover:text-white underline cursor-pointer text-[10px]"
-          >
-            Explorar 3D ↓
-          </button>
-        </div>
-
-        <div className="space-y-2 border-t border-white/20 pt-2 bg-black/35 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none p-2.5 sm:p-0 rounded-lg sm:rounded-none">
-          {PROJECTS_DATA.slice(0, 4).map((item, idx) => (
-            <div
-              key={item.slug}
-              onClick={() => scrollToProjectIndex(idx)}
-              className={`${
-                idx >= 2 ? "hidden sm:block" : "block"
-              } group border-b border-white/10 pb-1.5 cursor-pointer transition-all duration-200 hover:border-emerald-400/50`}
-            >
-              <p className="text-[10px] text-white/50 group-hover:text-emerald-400 transition-colors">
-                {item.date}
-              </p>
-              <p className="text-xs text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all truncate">
-                {item.title}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div
-        className={`fixed bottom-20 left-6 md:left-12 lg:left-16 z-20 pointer-events-none hidden sm:block transition-opacity duration-500 ${
-          isHeroVisible ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        <p className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">
-          ENTORNOS DE VENTAS DIGITALES, E-COMMERCE & IA
-        </p>
-        <p className="font-mono text-xs text-white/80 mt-1">
-          Desliza para explorar nuestros 9 proyectos o cotiza en vivo con IA.
-        </p>
-      </div>
-
-      {/* 8. HUD ESTADO 2: CARRUSEL DE PROYECTOS */}
+      {/* HUD INFERIOR: CARRUSEL 3D */}
       <div
         className={`fixed inset-x-0 ${
           showSoundPrompt ? "bottom-20 sm:bottom-16" : "bottom-12 sm:bottom-14"
@@ -911,12 +672,12 @@ export default function GuiporDIStudioPage() {
         }`}
       >
         <div className="max-w-[1720px] mx-auto flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-5">
-          <div className="max-w-2xl space-y-2 bg-black/65 md:bg-transparent backdrop-blur-md md:backdrop-blur-none p-3.5 sm:p-4 md:p-0 rounded-xl border border-white/15 md:border-none">
+          <div className="max-w-2xl space-y-2 bg-black/65 md:bg-transparent backdrop-blur-md p-3.5 sm:p-4 md:p-0 rounded-xl border border-white/15 md:border-none">
             <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
-              <span className="text-white/85 font-semibold tracking-wider">
+              <span className="text-white/85 font-semibold">
                 {activeProject.date}
               </span>
-              <span className="px-2 py-0.5 rounded-sm bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-[11px] line-clamp-1">
+              <span className="px-2 py-0.5 rounded-sm bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-[10px]">
                 {activeProject.highlightBadge}
               </span>
             </div>
@@ -928,7 +689,7 @@ export default function GuiporDIStudioPage() {
               <h2 className="text-lg sm:text-2xl md:text-4xl font-extrabold tracking-tight text-white group-hover:text-emerald-300 transition-colors leading-snug">
                 {activeProject.title}
               </h2>
-              <p className="font-mono text-[9px] sm:text-xs text-white/60 tracking-widest uppercase mt-0.5 truncate">
+              <p className="font-mono text-[9px] sm:text-xs text-white/60 uppercase mt-0.5 truncate">
                 {activeProject.subtitle}
               </p>
             </div>
@@ -937,7 +698,7 @@ export default function GuiporDIStudioPage() {
               {activeProject.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2 py-0.5 text-[9px] sm:text-[10px] font-mono tracking-wider border border-white/25 bg-black/50 text-white/85"
+                  className="px-2 py-0.5 text-[9px] font-mono border border-white/25 bg-black/50 text-white/85"
                 >
                   {tag}
                 </span>
@@ -945,41 +706,24 @@ export default function GuiporDIStudioPage() {
             </div>
           </div>
 
-          <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-3 font-mono px-1 sm:px-0">
+          <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-3 font-mono">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => scrollToProjectIndex(activeProjectIdx - 1)}
                 disabled={activeProjectIdx === 0}
-                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
-                aria-label="Proyecto anterior"
+                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <div className="hidden sm:flex items-center gap-1.5 px-2">
-                {PROJECTS_DATA.map((p, i) => (
-                  <button
-                    key={p.slug}
-                    onClick={() => scrollToProjectIndex(i)}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      i === activeProjectIdx
-                        ? "w-6 bg-emerald-400"
-                        : "w-1.5 bg-white/30 hover:bg-white/60"
-                    }`}
-                    title={p.title}
-                  />
-                ))}
-              </div>
-
               <span className="text-xs text-white/85 px-1">
-                {activeProject.id} / 09
+                {activeProject.id} / {carouselProjects.length}
               </span>
 
               <button
                 onClick={() => scrollToProjectIndex(activeProjectIdx + 1)}
-                disabled={activeProjectIdx === PROJECTS_DATA.length - 1}
-                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer transition-colors"
-                aria-label="Siguiente proyecto"
+                disabled={activeProjectIdx === carouselProjects.length - 1}
+                className="w-8 h-8 rounded-full border border-white/25 bg-black/60 flex items-center justify-center hover:border-emerald-400 disabled:opacity-30 cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -990,15 +734,15 @@ export default function GuiporDIStudioPage() {
                 onClick={() => openProjectModal(activeProject)}
                 className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer"
               >
-                <span>Ver Proyecto</span>
+                <span>Ver Ficha / Adquirir</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={() => setShowAllWorksGrid(true)}
-                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-mono tracking-wider text-white border-b border-white/60 pb-0.5 hover:text-emerald-400 hover:border-emerald-400 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-mono tracking-wider text-white border-b border-white/60 pb-0.5 hover:text-emerald-400 cursor-pointer"
               >
-                <span>Más Proyectos</span>
+                <span>Catálogo & Demos</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1006,13 +750,14 @@ export default function GuiporDIStudioPage() {
         </div>
       </div>
 
-      {/* 9. MODALES DE PROYECTOS Y COTIZADOR IA */}
+      {/* MODALES Y COTIZADOR IA */}
       <ProjectDetailModal
         selectedProject={selectedProject}
         detailDeviceView={detailDeviceView}
         setDetailDeviceView={setDetailDeviceView}
         onClose={() => setSelectedProject(null)}
         onSelectProject={(proj) => setSelectedProject(proj)}
+        allProjects={projectsList}
       />
 
       <AllWorksCatalogModal
@@ -1021,6 +766,7 @@ export default function GuiporDIStudioPage() {
         setSelectedCategory={setSelectedCategory}
         onClose={() => setShowAllWorksGrid(false)}
         onSelectProject={openProjectModal}
+        projectsList={projectsList}
       />
 
       <AIConciergeQuoteModal
@@ -1028,32 +774,16 @@ export default function GuiporDIStudioPage() {
         onClose={() => setShowQuoteModal(false)}
       />
 
-      {/* 10. CONTROL FLOTANTE PERSISTENTE DE SONIDO E INTRO */}
-      {!showSoundPrompt && (
-        <PersistentSoundAndIntroBadge
-          soundEnabled={soundEnabled}
-          onToggleSound={() => {
-            requestMobileGyroPermission();
-            setSoundEnabled((prev) => !prev);
-          }}
-          onReplayIntro={() => {
-            scrollToTopHero();
-            setShowIntro(true);
-          }}
-          isLightMode={isLightVisionMode}
-        />
-      )}
-
-      {/* 11. BARRA INFERIOR DE BIENVENIDA DE SONIDO */}
+      {/* BARRA INFERIOR DE AUDIO */}
       {showSoundPrompt && (
-        <footer className="fixed bottom-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-xl border-t border-white/15 px-4 sm:px-8 md:px-12 lg:px-16 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2.5 text-[10px] sm:text-xs font-mono text-white/85 text-center sm:text-left">
+        <footer className="fixed bottom-0 left-0 right-0 z-40 bg-black/95 backdrop-blur-xl border-t border-white/15 px-4 sm:px-8 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 font-mono text-xs">
+          <div className="flex items-center gap-2.5 text-white/85">
             <button
               onClick={() => {
                 requestMobileGyroPermission();
                 setSoundEnabled(!soundEnabled);
               }}
-              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-white/25 flex items-center justify-center hover:border-emerald-400 transition-colors cursor-pointer shrink-0"
+              className="w-6 h-6 rounded-full border border-white/25 flex items-center justify-center hover:border-emerald-400 cursor-pointer"
             >
               {soundEnabled ? (
                 <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -1061,19 +791,16 @@ export default function GuiporDIStudioPage() {
                 <VolumeX className="w-3.5 h-3.5 text-white/50" />
               )}
             </button>
-            <span className="leading-tight">
-              Este sitio utiliza audio espacial y shaders 3D interactivos.
-            </span>
+            <span>Audio espacial y shaders 3D interactivos activos.</span>
           </div>
-
-          <div className="flex items-center justify-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => {
                 requestMobileGyroPermission();
                 setSoundEnabled(true);
                 setShowSoundPrompt(false);
               }}
-              className="px-4 py-1 rounded-full border border-white/30 bg-white/10 hover:bg-white hover:text-black text-[10px] sm:text-[11px] font-mono transition-all cursor-pointer"
+              className="px-4 py-1 rounded-full border border-white/30 bg-white/10 hover:bg-white hover:text-black text-[11px] cursor-pointer"
             >
               Activar sonido
             </button>
@@ -1083,7 +810,7 @@ export default function GuiporDIStudioPage() {
                 setSoundEnabled(false);
                 setShowSoundPrompt(false);
               }}
-              className="px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-mono text-white/55 hover:text-white transition-colors cursor-pointer"
+              className="px-3 py-1 rounded-full text-[11px] text-white/55 hover:text-white cursor-pointer"
             >
               Continuar sin sonido
             </button>

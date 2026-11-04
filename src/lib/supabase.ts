@@ -44,6 +44,83 @@ export interface ApiRechargeRecord {
   notes?: string;
 }
 
+export type CatalogItemType = "PORTAFOLIO" | "DEMO_VENTA_SAAS" | "AMBOS";
+
+export interface CatalogItemRecord {
+  id?: string;
+  created_at?: string;
+  code_id: string;
+  slug: string;
+  date: string;
+  catalog_type: CatalogItemType;
+  category: string;
+  highlight_badge: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+  architecture: string[];
+  deliverables: string[];
+  desktop_img: string;
+  mobile_img: string;
+  modal_mobile_img: string;
+  accent_rgb: [number, number, number];
+  price_usd: number;
+  billing_type: string;
+  demo_url?: string;
+  in_3d_carousel?: boolean;
+  is_active?: boolean;
+}
+
+export interface PaymentMethodRecord {
+  id?: string;
+  created_at?: string;
+  method_type: "BINANCE_PAY" | "ZELLE" | "PAGO_MOVIL" | "TRANSFERENCIA";
+  label: string;
+  account_holder: string;
+  account_identifier: string;
+  bank_or_network?: string;
+  qr_image_url?: string;
+  instructions?: string;
+  is_active: boolean;
+}
+
+export interface OrganicOrderRecord {
+  id?: string;
+  created_at?: string;
+  order_code: string;
+  client_name: string;
+  client_contact: string;
+  item_slug: string;
+  item_title: string;
+  base_amount_usd: number;
+  unique_validation_amount_usd: number;
+  payment_method: string;
+  payment_reference: string;
+  sender_identifier?: string;
+  status:
+    | "PENDIENTE_PAGO"
+    | "VERIFICANDO"
+    | "PAGADO_VALIDADO"
+    | "REVISION_MANUAL"
+    | "ENTREGADO";
+  matched_vault_id?: string | null;
+  notes?: string;
+}
+
+export interface IncomingPaymentVaultRecord {
+  id?: string;
+  created_at?: string;
+  provider: string;
+  amount_detected: number;
+  currency: string;
+  reference_or_order_id: string;
+  sender_info?: string;
+  raw_subject?: string;
+  raw_excerpt?: string;
+  status: "DISPONIBLE" | "CONSUMIDO";
+}
+
 function getSupabaseConfig() {
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
   const key =
@@ -97,7 +174,8 @@ export async function supabaseRestRequest<T = unknown>(
   } catch (err) {
     return {
       data: null,
-      error: err instanceof Error ? err.message : "Error de conexión a Supabase",
+      error:
+        err instanceof Error ? err.message : "Error de conexión a Supabase",
     };
   }
 }
