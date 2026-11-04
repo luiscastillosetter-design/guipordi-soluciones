@@ -134,7 +134,7 @@ function StudioScene({
     scrollRef.current.velocity = (next - prev) * 14.0;
     scrollRef.current.current = next;
 
-    // MAGIA DE DECAIMIENTO: Si el cursor se detiene, la velocidad (efecto agua) baja a 0 rápidamente.
+    // Decaimiento del agua súper suave
     mouseRef.current.speed = THREE.MathUtils.lerp(mouseRef.current.speed, 0, 0.1);
 
     const inWorks = next > 0.09 && next < 1.03;
@@ -213,13 +213,13 @@ export default function GuiporDIStudioPage() {
   const mouseRef = useRef({ x: 0, y: 0, speed: 0 });
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const scrollRef = useRef({ current: 0, target: 0, velocity: 0 });
-  // Añadimos isTouching para que el acelerómetro no pelee con el dedo
-  const touchStartRef = useRef({ x: 0, y: 0, isTouching: false }); 
+  const touchStartRef = useRef({ x: 0, y: 0, isTouching: false });
+  const gyroBaseBetaRef = useRef<number | null>(null);
+  
+  // Optimizador para evitar sobrecarga de React al actualizar coordenadas
+  const lastNormalUpdateRef = useRef(0);
 
-  const [projectsList, setProjectsList] =
-    useRef<ProjectItem[]>(FALLBACK_PROJECTS).current === FALLBACK_PROJECTS
-      ? useState<ProjectItem[]>(FALLBACK_PROJECTS)
-      : useState<ProjectItem[]>(FALLBACK_PROJECTS);
+  const [projectsList, setProjectsList] = useState<ProjectItem[]>(FALLBACK_PROJECTS);
 
   useEffect(() => {
     fetch("/api/admin-erp?mode=public_catalog")
@@ -230,9 +230,9 @@ export default function GuiporDIStudioPage() {
         }
       })
       .catch(() => {});
-  }, [setProjectsList]);
+  }, []);
 
-  // Bloquea el "Pull-to-refresh" nativo de los navegadores móviles
+  // Bloquea el "Pull-to-refresh" nativo
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -261,19 +261,14 @@ export default function GuiporDIStudioPage() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [inWorksSection, setInWorksSection] = useState(false);
   const [activeProjectIdx, setActiveProjectIdx] = useState(0);
-  const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(
-    null
-  );
-  const [detailDeviceView, setDetailDeviceView] = useState<
-    "ordenador" | "mobil"
-  >("ordenador");
+  const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+  const [detailDeviceView, setDetailDeviceView] = useState<"ordenador" | "mobil">("ordenador");
   const [showAllWorksGrid, setShowAllWorksGrid] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("TODOS");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
 
-  const activeProject =
-    carouselProjects[activeProjectIdx] || carouselProjects[0] || projectsList[0];
+  const activeProject = carouselProjects[activeProjectIdx] || carouselProjects[0] || projectsList[0];
 
   const { triggerHarmonicChime } = useSpatialAudioEngine(
     soundEnabled,
@@ -338,7 +333,6 @@ export default function GuiporDIStudioPage() {
       const dx = nx - lastMouseRef.current.x;
       const dy = ny - lastMouseRef.current.y;
       
-      // Multiplicador 80% más pequeño para la ola del agua (máximo en 0.12)
       const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 1.5, 0.12);
 
       mouseRef.current.x = nx;
@@ -350,21 +344,24 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
-      if (touchStartRef.current.isTouching) return; // Prioriza el dedo si estás tocando
+      if (touchStartRef.current.isTouching) return; 
       if (e.gamma === null || e.beta === null) return;
 
-      // Calibración natural de la gravedad: Inclinación absoluta para móvil
-      const tiltX = THREE.MathUtils.clamp(e.gamma / 35, -1, 1);
-      const tiltY = THREE.MathUtils.clamp((e.beta - 45) / 35, -1, 1);
+      // Restaurada la matemática perfecta de calibración relativa del giroscopio
+      if (gyroBaseBetaRef.current === null) {
+        gyroBaseBetaRef.current = e.beta;
+      }
+
+      const tiltX = THREE.MathUtils.clamp(e.gamma / 28, -1, 1);
+      const deltaBeta = e.beta - (gyroBaseBetaRef.current || 45);
+      const tiltY = THREE.MathUtils.clamp(-deltaBeta / 28, -1, 1);
       
       const dx = tiltX - lastMouseRef.current.x;
       const dy = tiltY - lastMouseRef.current.y;
-      
-      // Velocidad ínfima para que el giroscopio no haga olas en reposo
       const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 0.8, 0.1);
 
-      mouseRef.current.x = THREE.MathUtils.lerp(mouseRef.current.x, tiltX, 0.2);
-      mouseRef.current.y = THREE.MathUtils.lerp(mouseRef.current.y, tiltY, 0.2);
+      mouseRef.current.x = THREE.MathUtils.lerp(mouseRef.current.x, tiltX, 0.35);
+      mouseRef.current.y = THREE.MathUtils.lerp(mouseRef.current.y, tiltY, 0.35);
       mouseRef.current.speed = speed;
 
       lastMouseRef.current.x = mouseRef.current.x;
@@ -415,7 +412,6 @@ export default function GuiporDIStudioPage() {
         const dxScroll = touchStartRef.current.x - touchX;
         const dyScroll = touchStartRef.current.y - touchY;
 
-        // Efecto del agua bajo el dedo (también pequeñito)
         const nx = (touchX / window.innerWidth) * 2 - 1;
         const ny = -(touchY / window.innerHeight) * 2 + 1;
         const dxMouse = nx - lastMouseRef.current.x;
@@ -427,7 +423,6 @@ export default function GuiporDIStudioPage() {
         lastMouseRef.current.x = nx;
         lastMouseRef.current.y = ny;
 
-        // Scroll súper fluido y sin bloqueos
         const rawDelta = Math.abs(dxScroll) > Math.abs(dyScroll) ? dxScroll * 0.00055 : dyScroll * 0.00052;
         const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
         scrollRef.current.target = Math.min(Math.max(scrollRef.current.target + clampedDelta, 0), MAX_SCROLL);
@@ -460,8 +455,11 @@ export default function GuiporDIStudioPage() {
     showQuoteModal,
   ]);
 
+  // Controlador optimizado de actualizaciones normales para evitar lag extremo en PC
   const handleNormalUpdate = useCallback((nx: number, ny: number, nz: number) => {
-    if (Math.random() < 0.25) {
+    const now = Date.now();
+    if (now - lastNormalUpdateRef.current > 300) {
+      lastNormalUpdateRef.current = now;
       setNormalVec({
         x: Number(nx.toFixed(2)),
         y: Number(ny.toFixed(2)),
