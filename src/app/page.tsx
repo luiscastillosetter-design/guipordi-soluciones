@@ -134,6 +134,9 @@ function StudioScene({
     scrollRef.current.velocity = (next - prev) * 14.0;
     scrollRef.current.current = next;
 
+    // MAGIA DE DECAIMIENTO: Si el cursor se detiene, la velocidad (efecto agua) baja a 0 rápidamente.
+    mouseRef.current.speed = THREE.MathUtils.lerp(mouseRef.current.speed, 0, 0.1);
+
     const inWorks = next > 0.09 && next < 1.03;
     const total = carouselProjects.length;
     const carouselProgress = Math.max(0, (next - 0.14) / 0.86) * (total - 1);
@@ -210,8 +213,8 @@ export default function GuiporDIStudioPage() {
   const mouseRef = useRef({ x: 0, y: 0, speed: 0 });
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const scrollRef = useRef({ current: 0, target: 0, velocity: 0 });
-  const touchStartRef = useRef({ x: 0, y: 0 });
-  const gyroBaseBetaRef = useRef<number | null>(null);
+  // Añadimos isTouching para que el acelerómetro no pelee con el dedo
+  const touchStartRef = useRef({ x: 0, y: 0, isTouching: false }); 
 
   const [projectsList, setProjectsList] =
     useRef<ProjectItem[]>(FALLBACK_PROJECTS).current === FALLBACK_PROJECTS
@@ -334,7 +337,9 @@ export default function GuiporDIStudioPage() {
       const ny = -(e.clientY / window.innerHeight) * 2 + 1;
       const dx = nx - lastMouseRef.current.x;
       const dy = ny - lastMouseRef.current.y;
-      const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 8.0, 1.5);
+      
+      // Multiplicador 80% más pequeño para la ola del agua (máximo en 0.12)
+      const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 1.5, 0.12);
 
       mouseRef.current.x = nx;
       mouseRef.current.y = ny;
@@ -345,30 +350,21 @@ export default function GuiporDIStudioPage() {
     };
 
     const handleDeviceOrientation = (e: DeviceOrientationEvent) => {
+      if (touchStartRef.current.isTouching) return; // Prioriza el dedo si estás tocando
       if (e.gamma === null || e.beta === null) return;
 
-      if (gyroBaseBetaRef.current === null) {
-        gyroBaseBetaRef.current = e.beta;
-      }
-
-      const tiltX = THREE.MathUtils.clamp(e.gamma / 28, -1, 1);
-      const deltaBeta = e.beta - (gyroBaseBetaRef.current || 45);
-      const tiltY = THREE.MathUtils.clamp(-deltaBeta / 28, -1, 1);
-
+      // Calibración natural de la gravedad: Inclinación absoluta para móvil
+      const tiltX = THREE.MathUtils.clamp(e.gamma / 35, -1, 1);
+      const tiltY = THREE.MathUtils.clamp((e.beta - 45) / 35, -1, 1);
+      
       const dx = tiltX - lastMouseRef.current.x;
       const dy = tiltY - lastMouseRef.current.y;
-      const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 5.0, 1.2);
+      
+      // Velocidad ínfima para que el giroscopio no haga olas en reposo
+      const speed = Math.min(Math.sqrt(dx * dx + dy * dy) * 0.8, 0.1);
 
-      mouseRef.current.x = THREE.MathUtils.lerp(
-        mouseRef.current.x,
-        tiltX,
-        0.35
-      );
-      mouseRef.current.y = THREE.MathUtils.lerp(
-        mouseRef.current.y,
-        tiltY,
-        0.35
-      );
+      mouseRef.current.x = THREE.MathUtils.lerp(mouseRef.current.x, tiltX, 0.2);
+      mouseRef.current.y = THREE.MathUtils.lerp(mouseRef.current.y, tiltY, 0.2);
       mouseRef.current.speed = speed;
 
       lastMouseRef.current.x = mouseRef.current.x;
@@ -395,7 +391,12 @@ export default function GuiporDIStudioPage() {
       if (e.touches.length > 0) {
         touchStartRef.current.x = e.touches[0].clientX;
         touchStartRef.current.y = e.touches[0].clientY;
+        touchStartRef.current.isTouching = true;
       }
+    };
+
+    const handleTouchEnd = () => {
+      touchStartRef.current.isTouching = false;
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -411,27 +412,26 @@ export default function GuiporDIStudioPage() {
       if (e.touches.length > 0) {
         const touchX = e.touches[0].clientX;
         const touchY = e.touches[0].clientY;
-        const dy = touchStartRef.current.y - touchY;
-        const dx = touchStartRef.current.x - touchX;
+        const dxScroll = touchStartRef.current.x - touchX;
+        const dyScroll = touchStartRef.current.y - touchY;
 
+        // Efecto del agua bajo el dedo (también pequeñito)
         const nx = (touchX / window.innerWidth) * 2 - 1;
         const ny = -(touchY / window.innerHeight) * 2 + 1;
+        const dxMouse = nx - lastMouseRef.current.x;
+        const dyMouse = ny - lastMouseRef.current.y;
+
+        mouseRef.current.speed = Math.min(Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse) * 1.5, 0.12);
         mouseRef.current.x = nx;
         mouseRef.current.y = ny;
-        mouseRef.current.speed = Math.min(
-          Math.sqrt(dx * dx + dy * dy) * 0.04,
-          1.2
-        );
+        lastMouseRef.current.x = nx;
+        lastMouseRef.current.y = ny;
 
-        const rawDelta =
-          Math.abs(dx) > Math.abs(dy) ? dx * 0.00055 : dy * 0.00052;
+        // Scroll súper fluido y sin bloqueos
+        const rawDelta = Math.abs(dxScroll) > Math.abs(dyScroll) ? dxScroll * 0.00055 : dyScroll * 0.00052;
         const clampedDelta = THREE.MathUtils.clamp(rawDelta, -0.026, 0.026);
-
-        scrollRef.current.target = Math.min(
-          Math.max(scrollRef.current.target + clampedDelta, 0),
-          MAX_SCROLL
-        );
-
+        scrollRef.current.target = Math.min(Math.max(scrollRef.current.target + clampedDelta, 0), MAX_SCROLL);
+        
         touchStartRef.current.x = touchX;
         touchStartRef.current.y = touchY;
       }
@@ -442,17 +442,15 @@ export default function GuiporDIStudioPage() {
     window.addEventListener("wheel", handleWheel, { passive: true });
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
     window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener(
-        "deviceorientation",
-        handleDeviceOrientation,
-        true
-      );
+      window.removeEventListener("deviceorientation", handleDeviceOrientation, true);
       window.removeEventListener("wheel", handleWheel);
       window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
     };
   }, [
     showIntro,
